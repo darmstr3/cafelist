@@ -1,0 +1,46 @@
+{
+  "name": "cafelist",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "import:nyc": "tsx scripts/import-nyc.ts",
+    "import:nyc:dry": "tsx scripts/import-nyc.ts --dry-run",
+    "import:nyc:json": "tsx scripts/import-nyc.ts --output=nyc-spots.json",
+    "curate:workability": "tsx scripts/curate-workability.ts",
+    "curate:workability:dry": "tsx scripts/curate-workability.ts --dry-run --limit=5",
+    "coverage-gap": "tsx scripts/coverage-gap.ts",
+    "coverage-gap:dry": "tsx scripts/coverage-gap.ts --dry-run",
+    "optimize:prompt": "tsx scripts/optimize-prompt.ts",
+    "scout": "tsx scripts/scout.ts",
+    "scout:dry": "tsx scripts/scout.ts --dry-run",
+    "eval": "tsx scripts/eval.ts",
+    "eval:deterministic": "tsx scripts/labs-eval.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.104.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^1.11.0",
+    "next": "16.2.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.4",
+    "tailwindcss": "^4",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

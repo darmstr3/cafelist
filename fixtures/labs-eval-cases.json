@@ -1,0 +1,286 @@
+{
+  "$schema": "Each case is consumed by scripts/eval.ts. hardConstraints fields are interpreted as follows:\n  city, neighborhood   — case-insensitive substring match on top pick's city / neighborhood (or the borough alias from src/lib/labs/geo.ts).\n  openAt               — 'HH:MM' 24h. Top pick's hours on the eval weekday must cover that time.\n  needsOutlets/Wifi    — top pick.has_outlets / has_wifi must be true.\n  maxNoise             — top pick.noise_level ordinal must be <= this (silent<quiet<moderate<loud).\n  minPicks             — recommendation.picks.length >= this.\n  forbidsApology       — recommendation.summary must not begin with apology phrases.\n  expectFailGracefully — when true, picks may be empty BUT confidenceNote must flag uncertainty and summary must still avoid apology language.",
+  "weekday": "thursday",
+  "cases": [
+    {
+      "caseId": "manhattan-after-6pm-quiet-outlets",
+      "query": "I need somewhere in Manhattan to work for 3 hours after 6pm, not too loud, outlets preferred, near the F train.",
+      "tags": ["clear-constraints", "manhattan", "evening"],
+      "hardConstraints": {
+        "city": "New York City",
+        "neighborhood": "Manhattan",
+        "openAt": "18:00",
+        "needsOutlets": true,
+        "maxNoise": "quiet",
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "brooklyn-past-midnight-wifi-no-chains",
+      "query": "A quiet coffee shop in Brooklyn open past midnight, must have wifi, no chains.",
+      "tags": ["clear-constraints", "brooklyn", "late-night"],
+      "hardConstraints": {
+        "city": "New York City",
+        "neighborhood": "Brooklyn",
+        "openAt": "00:30",
+        "needsWifi": true,
+        "maxNoise": "quiet",
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "williamsburg-morning-calls",
+      "query": "Place in Williamsburg I can take morning calls from — outlets, decent wifi, doesn't have to be silent.",
+      "tags": ["clear-constraints", "williamsburg", "morning"],
+      "hardConstraints": {
+        "city": "New York City",
+        "neighborhood": "Williamsburg",
+        "openAt": "09:00",
+        "needsOutlets": true,
+        "needsWifi": true,
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "queens-astoria-afternoon-laptop",
+      "query": "Somewhere in Astoria, Queens for an afternoon laptop session — outlets matter most.",
+      "tags": ["clear-constraints", "queens", "afternoon"],
+      "hardConstraints": {
+        "city": "New York City",
+        "neighborhood": "Astoria",
+        "openAt": "14:00",
+        "needsOutlets": true,
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "soho-quick-coffee-loud-ok",
+      "query": "Quick coffee in SoHo, in and out, doesn't matter if it's loud.",
+      "tags": ["clear-constraints", "soho", "casual"],
+      "hardConstraints": {
+        "city": "New York City",
+        "neighborhood": "SoHo",
+        "openAt": "11:00",
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "west-village-evening-cozy",
+      "query": "Cozy spot in the West Village to write for an hour or two after dinner.",
+      "tags": ["clear-constraints", "manhattan", "vibe-led"],
+      "hardConstraints": {
+        "city": "New York City",
+        "neighborhood": "West Village",
+        "openAt": "20:00",
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "bushwick-late-laptop",
+      "query": "Bushwick spot to keep working on my laptop past 10pm — wifi and outlets, not silent please, I want a little buzz.",
+      "tags": ["clear-constraints", "brooklyn", "late-night"],
+      "hardConstraints": {
+        "city": "New York City",
+        "neighborhood": "Bushwick",
+        "openAt": "22:00",
+        "needsWifi": true,
+        "needsOutlets": true,
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "midtown-24hr-hotel-lobby",
+      "query": "I want a hotel lobby in Midtown that's open 24/7 with comfortable seating.",
+      "tags": ["clear-constraints", "manhattan", "24hr", "hotel"],
+      "hardConstraints": {
+        "city": "New York City",
+        "neighborhood": "Midtown",
+        "openAt": "03:00",
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "vibe-only-library-like",
+      "query": "Looking for somewhere library-like — hush, lots of focused people, no music if possible.",
+      "tags": ["vibe-only", "no-location"],
+      "hardConstraints": {
+        "maxNoise": "quiet",
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "vibe-only-industrial",
+      "query": "Industrial vibe please — concrete, exposed brick, maybe a roll-up door. Background music is fine.",
+      "tags": ["vibe-only", "no-location"],
+      "hardConstraints": {
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "vibe-only-cozy-rainy",
+      "query": "It's raining and I want somewhere cozy — warm lighting, soft chairs, the kind of place that smells like cinnamon.",
+      "tags": ["vibe-only", "no-location"],
+      "hardConstraints": {
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "no-location-3hr-laptop",
+      "query": "Anywhere I can sit for 3 hours with strong wifi and an outlet.",
+      "tags": ["no-location"],
+      "hardConstraints": {
+        "needsWifi": true,
+        "needsOutlets": true,
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "no-location-after-work-call",
+      "query": "Need to take a 30-minute call right after work — quiet, no kids, doesn't need to be a cafe.",
+      "tags": ["no-location", "evening"],
+      "hardConstraints": {
+        "openAt": "18:30",
+        "maxNoise": "quiet",
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "no-location-weekend-marathon",
+      "query": "Saturday writing marathon spot — 6+ hours, doesn't matter where as long as nobody minds me staying.",
+      "tags": ["no-location", "weekend"],
+      "hardConstraints": {
+        "openAt": "10:00",
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "contradictory-silent-24hr-outlets",
+      "query": "I need a silent place that's open 24 hours with lots of outlets and is also genuinely lively.",
+      "tags": ["contradictory"],
+      "hardConstraints": {
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "contradictory-cheap-fancy-quiet-bar",
+      "query": "Cheap fancy quiet bar in the Lower East Side that's also a coworking space and serves pour-over.",
+      "tags": ["contradictory", "manhattan"],
+      "hardConstraints": {
+        "neighborhood": "Lower East Side",
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "contradictory-no-wifi-laptop-work",
+      "query": "I want to do focused laptop work somewhere with no wifi and no other people.",
+      "tags": ["contradictory"],
+      "hardConstraints": {
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "adversarial-tulsa",
+      "query": "Quiet coffee shop in Tulsa, Oklahoma with outlets and late hours.",
+      "tags": ["adversarial", "no-data-city"],
+      "hardConstraints": {
+        "minPicks": 1,
+        "forbidsApology": true,
+        "expectFailGracefully": true
+      }
+    },
+    {
+      "caseId": "adversarial-mars-base",
+      "query": "Best cafe in the Mars colony base for getting agentic work done.",
+      "tags": ["adversarial", "nonsense"],
+      "hardConstraints": {
+        "minPicks": 1,
+        "forbidsApology": true,
+        "expectFailGracefully": true
+      }
+    },
+    {
+      "caseId": "adversarial-jakarta",
+      "query": "Late-night spot in Jakarta to write a screenplay — vibey, wifi, outlets.",
+      "tags": ["adversarial", "no-data-city"],
+      "hardConstraints": {
+        "minPicks": 1,
+        "forbidsApology": true,
+        "expectFailGracefully": true
+      }
+    },
+    {
+      "caseId": "borough-manhattan-broad",
+      "query": "Anywhere in Manhattan for a long focused session today.",
+      "tags": ["borough-variant", "manhattan"],
+      "hardConstraints": {
+        "city": "New York City",
+        "neighborhood": "Manhattan",
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "borough-brooklyn-broad",
+      "query": "Somewhere in Brooklyn this afternoon — I don't care which neighborhood.",
+      "tags": ["borough-variant", "brooklyn"],
+      "hardConstraints": {
+        "city": "New York City",
+        "neighborhood": "Brooklyn",
+        "openAt": "15:00",
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "borough-queens-broad",
+      "query": "Need somewhere in Queens to plug in for a few hours.",
+      "tags": ["borough-variant", "queens"],
+      "hardConstraints": {
+        "city": "New York City",
+        "neighborhood": "Queens",
+        "needsOutlets": true,
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "borough-williamsburg-specific",
+      "query": "Williamsburg — but specifically the south side, near the J train.",
+      "tags": ["borough-variant", "williamsburg"],
+      "hardConstraints": {
+        "city": "New York City",
+        "neighborhood": "Williamsburg",
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    },
+    {
+      "caseId": "borough-misspelled-brookyln",
+      "query": "Looking for a cafe in Brookyln to spend the afternoon. Anywhere with good seating.",
+      "tags": ["borough-variant", "brooklyn", "typo"],
+      "hardConstraints": {
+        "city": "New York City",
+        "neighborhood": "Brooklyn",
+        "minPicks": 1,
+        "forbidsApology": true
+      }
+    }
+  ]
+}

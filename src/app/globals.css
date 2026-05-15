@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────
+ * Cafelist — warm light palette (per BRAND_AND_DESIGN_BRIEF.md §2)
+ * Coffee-inspired: oat-milk cream + burnt copper accent.
+ * Replaces the previous dark-indigo developer-tool palette.
+ * ───────────────────────────────────────────────────────────── */
+:root {
+  /* Surfaces */
+  --background: #FAF7F2;        /* oat-milk cream */
+  --surface: #FFFFFF;           /* cards */
+  --surface-2: #F1ECE3;         /* parchment — chips, inputs */
+  --surface-3: #E8E0D2;         /* hover, photo placeholder */
+  --border: #E2D8C7;
+  --border-subtle: #EFE8DA;
+
+  /* Text */
+  --text-primary: #1B1410;      /* espresso black, not pure black */
+  --text-secondary: #5C4D40;    /* warm gray-brown */
+  --text-muted: #9C8C7B;        /* captions, meta */
+
+  /* Brand accent */
+  --accent: #B5530F;            /* burnt copper */
+  --accent-hover: #9A4309;
+  --accent-glow: rgba(181, 83, 15, 0.15);
+
+  /* Verdict signals — warm/earned versions of the standard 3 */
+  --yes: #2F7D4F;               /* forest green, not neon emerald */
+  --kinda: #C68512;             /* amber */
+  --no: #A8392F;                /* muted brick, less alarming than red */
+
+  /* Legacy aliases kept so untouched code doesn't break */
+  --emerald: var(--yes);
+  --yellow: var(--kinda);
+  --orange: var(--kinda);
+  --red: var(--no);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surface-2);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Selection */
+::selection {
+  background: var(--accent-glow);
+  color: var(--text-primary);
+}
+
+/* Focus */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Input reset — wrapped in @layer base so Tailwind utility classes
+ * (e.g. pl-11, py-3) can override these defaults without specificity wars.
+ * Without the layer, the unlayered rule beats utilities and you get the
+ * search-icon-overlapping-placeholder bug. */
+@layer base {
+  input, textarea, select {
+    background: var(--surface-2);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: var(--text-muted);
+  }
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+  /* Slowed and dimmed per brief — was emerald + bright, now warm-yes + softer */
+  0%, 100% { box-shadow: 0 0 0 0 rgba(47, 125, 79, 0.35); }
+  50%       { box-shadow: 0 0 0 6px rgba(47, 125, 79, 0); }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out both;
+}
+
+.pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+/* Card hover */
+.spot-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.spot-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(27, 20, 16, 0.08);
+  border-color: var(--accent);
+}
+
+/* Score ring */
+.score-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Wordmark — slightly tightened tracking */
+.wordmark {
+  font-family: var(--font-fraunces), Georgia, serif;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
