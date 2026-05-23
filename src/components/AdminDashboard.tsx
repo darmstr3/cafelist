@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Spot, Review, SpotStatus, ReviewStatus } from '@/types'
+import type { ScoutRunRow } from '@/lib/spots'
 import { formatHoursDisplay, typeLabel } from '@/lib/utils'
-import { Check, X, MapPin, Clock, Eye, Download, RefreshCw, AlertCircle, CheckCircle2, Pencil } from 'lucide-react'
+import { Check, X, MapPin, Clock, Eye, Download, RefreshCw, AlertCircle, CheckCircle2, Pencil, Telescope } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { SpotEditPanel } from './SpotEditPanel'
@@ -11,9 +12,10 @@ import { SpotEditPanel } from './SpotEditPanel'
 interface AdminDashboardProps {
   initialSpots: Spot[]
   initialReviews: (Review & { spot_name?: string })[]
+  initialScoutRuns?: ScoutRunRow[]
 }
 
-type Tab = 'spots' | 'reviews' | 'import'
+type Tab = 'spots' | 'reviews' | 'import' | 'scout'
 type SpotFilter = 'all' | SpotStatus
 type ReviewFilter = 'all' | ReviewStatus
 
@@ -50,7 +52,7 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-export function AdminDashboard({ initialSpots, initialReviews }: AdminDashboardProps) {
+export function AdminDashboard({ initialSpots, initialReviews, initialScoutRuns = [] }: AdminDashboardProps) {
   const [tab, setTab] = useState<Tab>('spots')
 
   // Import state
@@ -84,10 +86,30 @@ export function AdminDashboard({ initialSpots, initialReviews }: AdminDashboardP
   }
   const [spots, setSpots] = useState(initialSpots)
   const [reviews, setReviews] = useState(initialReviews)
+  const [scoutRuns] = useState<ScoutRunRow[]>(initialScoutRuns)
   const [spotFilter, setSpotFilter] = useState<SpotFilter>('pending')
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>('pending')
   const [loading, setLoading] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [scoutPendingOnly, setScoutPendingOnly] = useState(false)
+
+  // Rolling 24h cost from scout_runs, so the admin can sanity-check
+  // we're nowhere near the $3 daily cap. Snapshot "now" once at mount
+  // (React 19's purity rule disallows Date.now() during render); a
+  // tab-load-time freshness is plenty for an admin dashboard.
+  const [renderedAt] = useState(() => Date.now())
+  const { scoutCost24h, scoutInserted24h } = useMemo(() => {
+    const cutoff = renderedAt - 24 * 60 * 60 * 1000
+    let cost = 0
+    let inserted = 0
+    for (const r of scoutRuns) {
+      if (new Date(r.started_at).getTime() >= cutoff) {
+        cost += Number(r.total_cost_usd ?? 0)
+        inserted += r.candidates_inserted ?? 0
+      }
+    }
+    return { scoutCost24h: cost, scoutInserted24h: inserted }
+  }, [scoutRuns, renderedAt])
 
   function handleSpotEdited(updated: Spot) {
     setSpots((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
@@ -96,8 +118,10 @@ export function AdminDashboard({ initialSpots, initialReviews }: AdminDashboardP
 
   const pendingSpots = spots.filter((s) => s.status === 'pending').length
   const pendingReviews = reviews.filter((r) => r.status === 'pending').length
+  const pendingFromScout = spots.filter((s) => s.status === 'pending' && s.submitted_by === 'scout-agent').length
 
-  const filteredSpots = spotFilter === 'all' ? spots : spots.filter((s) => s.status === spotFilter)
+  const filteredSpots = (spotFilter === 'all' ? spots : spots.filter((s) => s.status === spotFilter))
+    .filter((s) => !scoutPendingOnly || (s.status === 'pending' && s.submitted_by === 'scout-agent'))
   const filteredReviews = reviewFilter === 'all' ? reviews : reviews.filter((r) => r.status === reviewFilter)
 
   async function handleSpotAction(id: string, status: 'approved' | 'rejected') {
@@ -165,7 +189,7 @@ export function AdminDashboard({ initialSpots, initialReviews }: AdminDashboardP
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
-        {(['spots', 'reviews', 'import'] as Tab[]).map((t) => (
+        {(['spots', 'reviews', 'scout', 'import'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -189,6 +213,14 @@ export function AdminDashboard({ initialSpots, initialReviews }: AdminDashboardP
                 {pendingReviews}
               </span>
             )}
+            {t === 'scout' && scoutRuns.length > 0 && (
+              <span
+                className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-bold"
+                style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: '#6366f1' }}
+              >
+                {scoutRuns.length}
+              </span>
+            )}
             {tab === t && (
               <div
                 className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full"
@@ -203,7 +235,7 @@ export function AdminDashboard({ initialSpots, initialReviews }: AdminDashboardP
       {tab === 'spots' && (
         <div>
           {/* Filter */}
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2 mb-4 flex-wrap">
             {(['all', 'pending', 'approved', 'rejected'] as SpotFilter[]).map((f) => (
               <button
                 key={f}
@@ -218,6 +250,24 @@ export function AdminDashboard({ initialSpots, initialReviews }: AdminDashboardP
                 {f} {f !== 'all' && `(${spots.filter((s) => s.status === f).length})`}
               </button>
             ))}
+            {pendingFromScout > 0 && (
+              <button
+                onClick={() => {
+                  setScoutPendingOnly((v) => !v)
+                  if (!scoutPendingOnly) setSpotFilter('pending')
+                }}
+                className="px-3 py-1 rounded-full text-xs font-medium border transition-all inline-flex items-center gap-1.5"
+                style={
+                  scoutPendingOnly
+                    ? { backgroundColor: '#6366f1', color: 'white', borderColor: '#6366f1' }
+                    : { backgroundColor: 'rgba(99,102,241,0.10)', color: '#6366f1', borderColor: 'rgba(99,102,241,0.3)' }
+                }
+                title="Show only pending spots discovered by the Scout agent"
+              >
+                <Telescope size={11} />
+                from scout ({pendingFromScout})
+              </button>
+            )}
           </div>
 
           {/* Spots list */}
@@ -242,6 +292,16 @@ export function AdminDashboard({ initialSpots, initialReviews }: AdminDashboardP
                           {spot.name}
                         </span>
                         <StatusBadge status={spot.status} />
+                        {spot.submitted_by === 'scout-agent' && (
+                          <span
+                            className="text-[10px] font-medium px-1.5 py-0.5 rounded-full inline-flex items-center gap-1"
+                            style={{ backgroundColor: 'rgba(99,102,241,0.12)', color: '#6366f1' }}
+                            title="Discovered by the Scout agent"
+                          >
+                            <Telescope size={9} />
+                            scout
+                          </span>
+                        )}
                         <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                           {typeLabel(spot.type)}
                         </span>
@@ -457,6 +517,121 @@ export function AdminDashboard({ initialSpots, initialReviews }: AdminDashboardP
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {/* Scout Tab */}
+      {tab === 'scout' && (
+        <div className="max-w-3xl space-y-4">
+          <div
+            className="p-5 rounded-xl border"
+            style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border-subtle)' }}
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+                style={{ backgroundColor: 'rgba(99,102,241,0.15)' }}
+              >
+                <Telescope size={15} style={{ color: '#6366f1' }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
+                  Scout Agent
+                </h3>
+                <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                  Every 4 hours, the Scout picks the highest-priority city that hasn&apos;t been
+                  scouted in the last week and pulls up to {' '}
+                  <span style={{ color: 'var(--text-primary)' }}>25 new candidates</span> from
+                  Google Places. New rows land as <code className="text-[11px] px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--surface-3)' }}>pending</code>
+                  {' '}with a <span style={{ color: '#6366f1' }}>scout</span> badge — Curator scores
+                  them on the next daily pass, and you approve them from the Spots tab.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Rolling cost / cap summary */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Runs (last 50)', value: scoutRuns.length.toString() },
+              { label: 'Inserted (24h)', value: scoutInserted24h.toString() },
+              { label: 'Cost (24h)', value: `$${scoutCost24h.toFixed(4)}` },
+              { label: 'Daily cap', value: '$3.00' },
+            ].map((m) => (
+              <div
+                key={m.label}
+                className="p-3 rounded-xl border"
+                style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border-subtle)' }}
+              >
+                <p className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>{m.value}</p>
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{m.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Runs table */}
+          <div
+            className="rounded-xl border overflow-hidden"
+            style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border-subtle)' }}
+          >
+            <div className="px-4 py-3 border-b text-xs font-semibold uppercase tracking-wide" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-muted)' }}>
+              Recent runs
+            </div>
+            {scoutRuns.length === 0 ? (
+              <p className="text-sm py-8 text-center" style={{ color: 'var(--text-muted)' }}>
+                No Scout runs yet. The scheduled task runs every 4 hours.
+              </p>
+            ) : (
+              <div className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>
+                {scoutRuns.map((r) => {
+                  const palette: Record<string, { bg: string; color: string }> = {
+                    running:  { bg: 'rgba(99,102,241,0.10)', color: '#6366f1' },
+                    success:  { bg: 'rgba(47,125,79,0.12)',  color: 'var(--yes)' },
+                    partial:  { bg: 'rgba(198,133,18,0.12)', color: 'var(--kinda)' },
+                    cap_hit:  { bg: 'rgba(198,133,18,0.12)', color: 'var(--kinda)' },
+                    skipped:  { bg: 'rgba(120,120,120,0.10)', color: 'var(--text-muted)' },
+                    error:    { bg: 'rgba(168,57,47,0.12)',  color: 'var(--no)' },
+                  }
+                  const p = palette[r.status] ?? palette.skipped
+                  const started = new Date(r.started_at)
+                  return (
+                    <div key={r.run_id} className="px-4 py-3 flex flex-col gap-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                          style={{ backgroundColor: p.bg, color: p.color }}
+                        >
+                          {r.status}
+                        </span>
+                        <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                          {r.city ?? '—'}
+                          {r.neighborhood ? ` / ${r.neighborhood}` : ''}
+                        </span>
+                        <span style={{ color: 'var(--text-muted)' }}>
+                          {started.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4 flex-wrap" style={{ color: 'var(--text-muted)' }}>
+                        <span>examined <strong style={{ color: 'var(--text-secondary)' }}>{r.candidates_examined}</strong></span>
+                        <span>inserted <strong style={{ color: 'var(--text-secondary)' }}>{r.candidates_inserted}</strong></span>
+                        <span>cost <strong style={{ color: 'var(--text-secondary)' }}>${Number(r.total_cost_usd).toFixed(4)}</strong></span>
+                      </div>
+                      {r.error_message && (
+                        <p className="text-[11px] mt-1" style={{ color: 'var(--no)' }}>
+                          {r.error_message}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            Caps: $0.50/run, $3.00/24h. Cron secret stored in <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--surface-3)' }}>SCOUT_CRON_SECRET</code>.
+            City queue and last-scouted timestamps live in <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--surface-3)' }}>scout_priority</code>.
+          </p>
         </div>
       )}
 
