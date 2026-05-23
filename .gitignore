@@ -20,3 +20,5 @@ Thumbs.db
 *.log
 npm-debug.log*
 .vercel
+gh-bootstrap.sh
+setup-github.sh
