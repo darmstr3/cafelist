@@ -29,22 +29,32 @@ import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-// ── Sandbox / proxy setup (mirrors labs-eval-full.ts) ────────
+// ── Sandbox / proxy setup ─────────────────────────────────
 // When running inside the workspace shell, Node's fetch goes
-// through a MITM-style HTTPS proxy with a self-signed cert. Disable
-// verification on THAT hop only, so the Anthropic + Supabase calls
-// land. No effect outside the sandbox (HTTPS_PROXY unset).
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { ProxyAgent, setGlobalDispatcher } = require('undici')
+// through a MITM-style HTTPS proxy with a self-signed cert.
+// Node's built-in fetch uses its bundled undici and ignores
+// setGlobalDispatcher from a separately-installed undici, so we
+// swap globalThis.fetch with the npm undici's fetch and configure
+// its dispatcher to trust the proxy's cert. No effect outside the
+// sandbox (HTTPS_PROXY unset) and the npm-installed undici is
+// optional — we skip silently if it isn't present.
 const _proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy
 if (_proxyUrl) {
-  setGlobalDispatcher(
-    new ProxyAgent({
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const undici = require('undici')
+    const dispatcher = new undici.ProxyAgent({
       uri: _proxyUrl,
       requestTls: { rejectUnauthorized: false },
       proxyTls: { rejectUnauthorized: false },
     })
-  )
+    undici.setGlobalDispatcher(dispatcher)
+    // Replace native fetch so Node uses the npm undici (which honors
+    // the dispatcher we just set) instead of the bundled one.
+    ;(globalThis as { fetch: typeof fetch }).fetch = undici.fetch as typeof fetch
+  } catch {
+    // undici not installed — assume the environment is fine.
+  }
 }
 
 // ── .env.local loader ───────────────────────────────────────
@@ -157,7 +167,7 @@ function sha256(s: string): string {
 
 function gitSha(): string | null {
   try {
-    return execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim()
+    return execSync('git rev-parse HEAD', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
   } catch {
     return null
   }

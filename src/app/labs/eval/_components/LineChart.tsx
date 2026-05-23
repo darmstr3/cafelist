@@ -63,8 +63,8 @@ export function LineChart({
   const values = data.map((d) => d.value)
   const observedMin = Math.min(...values)
   const observedMax = Math.max(...values)
-  const lo = yMin ?? Math.max(0, observedMin - (observedMax - observedMin) * 0.2 || 0)
-  const hi = yMax ?? observedMax + (observedMax - observedMin) * 0.2 || observedMax + 1
+  const lo = yMin ?? (Math.max(0, observedMin - (observedMax - observedMin) * 0.2) || 0)
+  const hi = yMax ?? (observedMax + (observedMax - observedMin) * 0.2 || observedMax + 1)
   const range = Math.max(0.0001, hi - lo)
 
   const innerW = W - PAD_L - PAD_R
