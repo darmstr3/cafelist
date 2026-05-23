@@ -1,118 +1,107 @@
-# GroundWork ☕
+# Cafelist
 
-**Find the best cafes to work from in any city — scored 0–100 by wifi, outlets, noise, and hours.**
+[![CI](https://github.com/darmstr3/cafelist/actions/workflows/ci.yml/badge.svg)](https://github.com/darmstr3/cafelist/actions/workflows/ci.yml)
 
-Data pulled live from Google Maps, Yelp, and Reddit via Apify. Results cached 48 hours per city.
+**Find a café for what you're trying to do — not just what's nearby.**
 
----
-
-## Score breakdown
-
-| Category | Max | How it's calculated |
-|----------|-----|---------------------|
-| **Wi-Fi** | 30 | Keyword analysis of all reviews: "good wifi", "fast internet" vs "no wifi", "spotty" |
-| **Outlets** | 20 | "lots of outlets", "charging available" vs "no outlets", "can't charge" |
-| **Noise** | 20 | "quiet", "peaceful", "calm" (up) vs "loud", "noisy", "crowded" (down) |
-| **Rating** | 15 | Google + Yelp star rating normalized to 0–15 |
-| **Hours** | 15 | Points for opening before 8am, closing after 10pm, open 7 days |
+Live: [cafelist.app](https://cafelist.app) · Experimental agentic layer: [cafelist.app/labs](https://cafelist.app/labs)
 
 ---
 
-## Data sources
+## What this is
 
-- **`apify/google-maps-scraper`** — canonical list of cafes, hours, photos, Google rating, reviews
-- **`apify/yelp-scraper`** — additional work-keyword-filtered reviews merged by name matching
-- **`apify/reddit-scraper`** — r/digitalnomad, r/remotework, city subreddits for context signals
+Cafelist is a working product (cafelist.app) plus an agentic R&D surface (`/labs`) where I'm building a different kind of café recommender: pick a **mode** like Deep Work or Client Meeting, and the system retrieves and ranks cafés against the constraints that actually matter for that mode — not just "5-star nearby." The AI explains recommendations grounded in real café data; it does not invent facts.
 
-One `APIFY_API_TOKEN` — that's the only external credential required for data.
+This repo is also where I do my product-building in public. Roadmap, decisions, and weekly ship logs all live here.
 
----
+## Why it's interesting
 
-## Project structure
+Most "AI café finders" call a model with "find me a quiet café in SoHo" and trust whatever comes back. That's a hallucination risk wrapped in a chat UI. Cafelist Labs separates the two halves:
+
+- **Deterministic retrieval + scoring** runs over a real Supabase-backed café directory. Filters and weights produce a ranked shortlist.
+- **LLM explanation layer** writes a short, grounded "why this fits" for each card — but it only references fields that were actually retrieved. The Evaluator agent grades every recommendation and the regression dashboard catches drift.
+
+The result is a system you can ship, audit, and iterate on. There are also five background agents keeping the data flowing — see [Architecture](#architecture).
+
+## Architecture
 
 ```
-src/
-├── app/
-│   ├── page.tsx                    # Search-driven homepage (city input → results)
-│   └── api/
-│       └── search/route.ts         # Cache check → parallel Apify scrape → score → cache
-├── components/
-│   ├── CitySearch.tsx              # City input + popular city pills
-│   ├── CafeCard.tsx                # Card: score badge, signals, hours, breakdown
-│   ├── CafeGrid.tsx                # Filterable grid (min score, open now, neighborhood)
-│   └── ScoreBreakdown.tsx          # Expandable 5-bar score breakdown + review excerpts
-├── lib/
-│   ├── apify.ts                    # ApifyClient wrapper (runActor)
-│   ├── actors/
-│   │   ├── google-maps.ts          # apify/google-maps-scraper input/output types
-│   │   ├── yelp.ts                 # apify/yelp-scraper + work-keyword filter
-│   │   └── reddit.ts               # apify/reddit-scraper across relevant subreddits
-│   ├── scorer.ts                   # 0–100 scoring algorithm with per-category breakdown
-│   ├── normalize.ts                # Merge Google + Yelp + Reddit → CafeRecord[]
-│   └── cache.ts                    # File cache (./data/) + memory fallback
-└── types/
-    └── cafe.ts                     # All TypeScript types
-
-data/                               # Auto-created, gitignored — 48hr JSON cache per city
+┌───────────────────────────────────────────────────────────────────┐
+│                          User on /labs                            │
+└──────────────────────────────┬────────────────────────────────────┘
+                               │  POST /api/labs/recommend
+                               ▼
+┌───────────────────────────────────────────────────────────────────┐
+│  Agentic pipeline (per-request, fully traced)                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────┐  │
+│  │  Intent  │→ │ Retriever│→ │   Fit    │→ │Recommend │→ │Eval │  │
+│  │  Parser  │  │  (SQL)   │  │  Scorer  │  │  -er     │  │-ator│  │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └─────┘  │
+└──────────────────────────────┬────────────────────────────────────┘
+                               │
+                  ┌────────────┴────────────┐
+                  ▼                         ▼
+        agent_query_logs            agent_eval_runs/results
+                  │                         │
+                  ▼                         ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  Background agents (scheduled, semi-autonomous)                  │
+│  • Scout         — Google Places discovery, every 4h             │
+│  • Curator       — workability_score (0–10), daily               │
+│  • Coverage Gap  — query-log → Scout priority, weekly            │
+│  • Optimizer     — prompt-search with promotion rule, on-demand  │
+│  • Eval Harness  — quality regression dashboard at /labs/eval    │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
----
+`/admin/ops` is a single-page operator dashboard showing all five agents' health.
 
-## Setup
+## Tech
 
-### 1. Get an Apify API token (free tier available)
+- **Frontend:** Next.js 16, React 19, Tailwind 4, TypeScript
+- **Backend:** Next.js API routes, Supabase (Postgres + RLS)
+- **AI:** Anthropic Claude (Haiku for hot-path, Sonnet for grading)
+- **Data:** Google Places API for discovery
+- **Hosting:** Vercel (with Cron for Scout) + Supabase
+- **Auth:** HTTP Basic Auth middleware on `/admin` and mutating API routes (fails closed in prod)
 
-1. Go to [console.apify.com](https://console.apify.com) → sign up free
-2. Go to **Account → Integrations → API tokens** → create a token
-3. Free tier gives $5/month credit — enough for ~10 city searches
-
-### 2. Add to `.env.local`
+## Run locally
 
 ```bash
-APIFY_API_TOKEN=apify_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-### 3. Run
-
-```bash
+git clone https://github.com/darmstr3/cafelist.git
+cd cafelist
 npm install
+cp .env.local.example .env.local
+# Fill in SUPABASE, ANTHROPIC, GOOGLE_PLACES, ADMIN, SCOUT keys
 npm run dev
+# → http://localhost:3000
+# → http://localhost:3000/labs
 ```
 
-Open [http://localhost:3000](http://localhost:3000), type a city, hit Search.
+## Working agents (production)
 
----
+| Agent | What it does | When |
+|---|---|---|
+| **Scout** | Picks the highest-priority city from `scout_priority`, runs Google Places text queries, dedupes, inserts pending spots. | Every 4h via Vercel Cron |
+| **Curator** | LLM-scores `workability_score` (0–10) on new and >90-day spots. | Daily, 04:03 |
+| **Coverage Gap** | Reads last 7d of `agent_query_logs`, scores city/neighborhood demand vs. coverage, upserts top 20 into `scout_priority`. | Mondays, 07:00 |
+| **Prompt Optimizer** | Searches over prompt variants per stage; promotes a variant iff avg quality > 5% better AND no case regresses > 1.0 pt. Audit trail in `agent_prompt_runs` + JOURNAL.md + git. | On-demand: `npm run optimize:prompt -- recommender` |
+| **Eval Harness** | 25-case fixture (`fixtures/labs-eval-cases.json`), in-process pipeline run, deterministic checks + LLM judge, dashboard at `/labs/eval`. | On-demand: `npm run eval` |
 
-## Deploy to Vercel
+## Project docs
 
-```bash
-vercel
-```
+- [**LABS_V2_PLAN.md**](./LABS_V2_PLAN.md) — the operating manual for V2: scope, cadence, agent responsibilities, Week-1 tickets, production-safety rules.
+- [**CHANGELOG.md**](./CHANGELOG.md) — every shipped change.
+- [**SHIP_LOG.md**](./SHIP_LOG.md) — weekly narrative.
+- [**DECISION_LOG.md**](./DECISION_LOG.md) — ADRs for non-obvious calls.
+- [**JOURNAL.md**](./JOURNAL.md) — engineering log (longer-form).
 
-Set `APIFY_API_TOKEN` in your Vercel project's environment variables.
+## Status
 
-**Important:** Apify scraping runs take 1–5 minutes. Vercel's free plan has a 10-second function timeout. Two options:
-- **Vercel Pro** — set `maxDuration = 300` in `vercel.json` (already in the route)
-- **Cache-warmup script** — pre-run your top cities on a cron job so users always hit cache
+- **V1 (free-text `/labs`)** — shipped, in production at `cafelist.app/labs`.
+- **V2 (mode picker)** — in development on `feat/labs-v2-*` branches. Gated behind `NEXT_PUBLIC_LABS_V2` env flag. Production stays on V1 until V2 is end-to-end ready.
+- **Main = production.** Every PR merge auto-deploys to cafelist.app. See [LABS_V2_PLAN.md §16](./LABS_V2_PLAN.md#16-production-safety-guardrails) for the safety rules.
 
-For production at scale, use a background job (e.g. Trigger.dev, Inngest, or a cron that hits `/api/search?city=...` for your top cities every 24hrs).
+## License
 
----
-
-## How the cache works
-
-1. Search request arrives for `"New York City"`
-2. Check `data/new-york-city.json` (or `/tmp/groundwork-cache/` on Vercel)
-3. If file exists and is < 48 hours old → return immediately (< 50ms)
-4. If stale/missing → run all 3 Apify actors in parallel, merge, score, cache, return
-
-Cache lives in `./data/[city-slug].json`. Add `data/` to `.gitignore` to avoid committing scraped data.
-
----
-
-## Scoring notes
-
-- **Reviews with no text** → scoring falls back to star rating as proxy
-- **No Yelp match found** → scored on Google Maps reviews only
-- **Reddit** → used for supplementary signal context, not per-cafe matching
-- **Noise score** starts at 10/20 (neutral) and moves up/down based on keyword sentiment
+MIT.
