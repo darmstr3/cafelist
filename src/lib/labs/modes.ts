@@ -36,6 +36,7 @@ import type { NoiseLevel, SpotType } from '@/types'
 
 export type ModeId =
   | 'deep_work'
+  | 'study_session'
   | 'creative_reset'
   | 'coffee_date'
   | 'client_meeting'
@@ -153,6 +154,28 @@ export const MODES: Record<ModeId, Mode> = {
     weights: { location: 2, time: 2, noise: 3, features: 3, vibe: 1 },
     exampleQuery:
       'Quiet spot with outlets and wifi where I can post up with my laptop for a few hours.',
+  },
+
+  // TODO(data-agent, ticket #6): Tune Study session's hardConstraints
+  // and weights once Coverage-Gap surfaces student-query patterns.
+  // UX defaults below assume: quieter than deep_work, table space
+  // matters more than wifi speed, longer dwell times tolerated.
+  // The label/blurb/exampleQuery are UX-locked; the constraints
+  // vector is Data-Agent territory.
+  study_session: {
+    id: 'study_session',
+    label: 'Study session',
+    blurb: 'Long stretch with textbooks or notes — quiet, outlets, table space.',
+    hardConstraints: {
+      noiseTolerance: 'quiet',
+      needsOutlets: true,
+      needsWifi: true,
+      laptopFriendly: true,
+      vibe: ['cozy', 'calm'],
+    },
+    weights: { location: 2, time: 2, noise: 3, features: 3, vibe: 2 },
+    exampleQuery:
+      'Quiet spot to study for a few hours — outlets, room for textbooks and a laptop, not too crowded.',
   },
 
   creative_reset: {
