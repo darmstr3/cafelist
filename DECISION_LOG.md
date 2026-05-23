@@ -4,6 +4,32 @@ Append-only. Lightweight ADRs. Read newest-first.
 
 ---
 
+## ADR-0005 — Add Study session as 5th primary mode
+
+**Date:** 2026-05-23
+**Status:** Accepted (amends ADR-0001)
+
+**Context.** While reviewing the mode-picker layout sketch (ticket #5), the student market surfaced as a distinct user lens Cafelist Labs wasn't capturing. "Deep Work" reads as job-coded — a student looking for a place to study won't self-identify with it. The product mission in LABS_V2_PLAN.md §1 is "what they're trying to do," and Studying is one of the most universal *things-people-are-trying-to-do* in cafés.
+
+**Decision.** Add `study_session` as a 5th primary mode. The picker now renders 5 + Other in a 2-column × 3-row grid:
+
+Row 1: Deep Work · Study session
+Row 2: Creative Reset · Coffee Date / Social
+Row 3: Client Meeting · Other / describe
+
+Hard-constraint and weight defaults for `study_session` are UX-supplied stubs in `src/lib/labs/modes.ts` and carry a `TODO(data-agent, ticket #6)` for Data Agent tuning once Coverage-Gap surfaces real student-query patterns.
+
+**Alternatives considered.**
+- Keep ADR-0001's 4 + Other and fold Studying into a modifier pill. Rejected — modifiers refine a mode; they don't help a user self-identify into the right primary card.
+- Rename "Deep Work" to "Deep Work / Study." Rejected — slash labels read as two equal options and dilute both meanings.
+- Defer until V2.1 when we have query-log evidence. Rejected — adding a card now is cheap (declarative registry), and the friend-demo next week is the moment to capture student-market signal.
+
+**Consequences.** One more eval case required (ticket #12 grows from 7 to 8 cases). Hick's-Law argument from ADR-0001 weakens marginally — 5+Other vs. 4+Other on a 2-column mobile grid is the same scan pattern, just one extra row. The 2×3 layout is actually cleaner than 2×2-plus-full-width-Other.
+
+**Revisit when.** Query logs show < 5% of mode picks land on `study_session` after 4 weeks of V2 live — collapse it into `deep_work` with a "Studying" modifier pill. OR Coverage-Gap shows student-specific demand patterns (textbook space, group study) that warrant their own component scorers.
+
+---
+
 ## ADR-0004 — Production safety: feature flags + feature branches for all V2 work
 
 **Date:** 2026-05-23
@@ -75,7 +101,7 @@ Append-only. Lightweight ADRs. Read newest-first.
 ## ADR-0001 — `/labs` V2 primary: mode picker (4 + Other + modifier pills); free text as "Other"
 
 **Date:** 2026-05-23
-**Status:** Accepted
+**Status:** Amended by ADR-0005 (mode set expanded to 5 + Other to add Study session)
 
 **Context.** Today's `/labs` is free-text-only. V2 needs a more structured entry point that maps cleanly to scoring weights. Original proposal was 7 preset modes (Deep Work, Solo Founder, Creative Reset, Coffee Date, Client Meeting, Late-Night, Reading) + Other.
 
