@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { SpotsDirectory } from '@/components/SpotsDirectory'
 import { getSpots, getCities } from '@/lib/spots'
 
@@ -18,7 +19,7 @@ export default async function HomePage() {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
           {/* Wordmark */}
-          <a href="/" className="flex items-baseline gap-2 shrink-0">
+          <Link href="/" className="flex items-baseline gap-2 shrink-0">
             <span
               className="wordmark text-[18px]"
               style={{ color: 'var(--text-primary)' }}
@@ -31,20 +32,20 @@ export default async function HomePage() {
             >
               Worth your time.
             </span>
-          </a>
+          </Link>
 
           {/* Right-side actions */}
           {/* /labs is intentionally not linked here — it's gated by the admin
               middleware while still in-progress. Access it via /labs directly
               with admin credentials. */}
           <div className="ml-auto flex items-center gap-3">
-            <a
+            <Link
               href="/submit"
               className="text-[11px] font-medium transition-opacity hover:opacity-80"
               style={{ color: 'var(--text-muted)' }}
             >
               Submit a spot
-            </a>
+            </Link>
           </div>
         </div>
       </div>
@@ -62,7 +63,7 @@ export default async function HomePage() {
           <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
             Our database is having a momentary hiccup — usually clears up in a minute. Refresh the page and you should be back in the land of cafés.
           </p>
-          <a
+          <Link
             href="/"
             className="mt-2 px-4 py-2 rounded-lg text-sm font-medium border transition-opacity hover:opacity-80"
             style={{
@@ -72,7 +73,7 @@ export default async function HomePage() {
             }}
           >
             Try again
-          </a>
+          </Link>
         </div>
       ) : spots.length === 0 ? (
         <div className="max-w-md mx-auto px-4 sm:px-6 py-24 flex flex-col items-center gap-3 text-center">

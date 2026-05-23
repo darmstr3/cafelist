@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { MapPin, Send } from 'lucide-react'
 import { SpotType } from '@/types'
 import { cn } from '@/lib/utils'
@@ -125,13 +126,13 @@ export default function SubmitPage() {
         <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
           Thanks for the contribution. Your spot will appear after review by our team.
         </p>
-        <a
+        <Link
           href="/"
           className="inline-block px-6 py-2.5 rounded-lg text-sm font-semibold"
           style={{ backgroundColor: 'var(--accent)', color: 'white' }}
         >
           Back to directory
-        </a>
+        </Link>
       </div>
     )
   }

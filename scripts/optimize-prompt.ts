@@ -41,7 +41,7 @@ import Anthropic from '@anthropic-ai/sdk'
 // Mirror labs-eval-full.ts: when an HTTPS proxy is set (sandbox /
 // dev environments), the proxy presents a self-signed cert. Disable
 // cert verification on that hop only. Production never runs this.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { ProxyAgent, setGlobalDispatcher } = require('undici')
 const _proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy
 if (_proxyUrl) {

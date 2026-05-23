@@ -168,7 +168,7 @@ export function CafeModal({ cafe, onClose }: Props) {
               {cafe.reviewSamples.slice(0, 2).map((r, i) => (
                 <p key={i} className="text-xs leading-relaxed italic"
                   style={{ color: 'var(--text-muted)', borderLeft: '2px solid var(--border)', paddingLeft: 10 }}>
-                  "{r}"
+                  &ldquo;{r}&rdquo;
                 </p>
               ))}
             </div>

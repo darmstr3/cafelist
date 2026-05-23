@@ -372,7 +372,7 @@ async function main() {
   log(`  💾 Upserting ${spots.length} spots into Supabase...`)
 
   let inserted = 0
-  let updated = 0
+  const updated = 0
   let errors = 0
 
   // Upsert in batches of 20
