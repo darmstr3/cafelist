@@ -1,13 +1,7 @@
-import { supabase, supabaseAdmin } from './supabase'
+import { supabase, supabaseAdmin, isSupabaseConfigured } from './supabase'
 import { Spot, SpotFilters, Review } from '@/types'
 import { isOpenNow, isOpenLate, isOpenAfterMidnight } from './utils'
 import { DEMO_SPOTS, DEMO_CITIES } from './demo-data'
-
-// Returns true when Supabase is configured with real credentials
-function isSupabaseConfigured(): boolean {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-  return url.length > 0 && !url.includes('placeholder')
-}
 
 // ── Fetch all approved spots (with filters) ───────────────────
 
@@ -173,6 +167,38 @@ export async function adminGetAllSpots(): Promise<Spot[]> {
 
   if (error) return []
   return (data ?? []) as Spot[]
+}
+
+// ── Admin: fetch recent scout runs ────────────────────────────
+
+export interface ScoutRunRow {
+  run_id: string
+  started_at: string
+  finished_at: string | null
+  city: string | null
+  neighborhood: string | null
+  candidates_examined: number
+  candidates_inserted: number
+  total_cost_usd: number
+  status: 'running' | 'success' | 'partial' | 'skipped' | 'error' | 'cap_hit'
+  error_message: string | null
+  notes: string | null
+}
+
+export async function adminGetScoutRuns(limit = 50): Promise<ScoutRunRow[]> {
+  if (!isSupabaseConfigured()) return []
+
+  const { data, error } = await supabaseAdmin
+    .from('scout_runs')
+    .select('*')
+    .order('started_at', { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    console.error('adminGetScoutRuns error:', error)
+    return []
+  }
+  return (data ?? []) as ScoutRunRow[]
 }
 
 // ── Admin: fetch all reviews ──────────────────────────────────

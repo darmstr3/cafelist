@@ -34,20 +34,10 @@ export default async function HomePage() {
           </a>
 
           {/* Right-side actions */}
+          {/* /labs is intentionally not linked here — it's gated by the admin
+              middleware while still in-progress. Access it via /labs directly
+              with admin credentials. */}
           <div className="ml-auto flex items-center gap-3">
-            <a
-              href="/labs"
-              className="text-[11px] font-medium transition-opacity hover:opacity-80 inline-flex items-center gap-1"
-              style={{ color: 'var(--accent)' }}
-            >
-              <span>Labs</span>
-              <span
-                className="text-[9px] px-1 py-0.5 rounded uppercase tracking-wide"
-                style={{ backgroundColor: 'var(--accent-glow)', color: 'var(--accent)' }}
-              >
-                new
-              </span>
-            </a>
             <a
               href="/submit"
               className="text-[11px] font-medium transition-opacity hover:opacity-80"
