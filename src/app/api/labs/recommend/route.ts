@@ -4,12 +4,32 @@
 // Orchestrator for the /labs agentic discovery layer. Wires the
 // pipeline together:
 //
-//   parse intent → retrieve candidates → score fit
+//   parse / synthesize intent → retrieve candidates → score fit
 //        → write recommendation → evaluate result
 //
 // Each stage is wrapped in a tracer span so the response includes a
 // full per-stage trace (latency, token usage, estimated cost, OK
 // or error) for the UI to render in expandable panels.
+//
+// Two request shapes, dispatched by payload:
+//
+//   V1 (free text, today's /labs):
+//     { query: string }
+//     → parseIntent(query) inside the intent_parser tracer span.
+//
+//   V2 (mode picker, ticket #7):
+//     { mode, modifiers, location, weekday, query? }
+//     → synthesizeIntent({ mode, modifiers, location, weekday })
+//       inside the intent_parser tracer span. If `mode === 'other'`,
+//       falls back to parseIntent(query). If `mode !== 'other'` and
+//       a non-empty `query` is also supplied, parseIntent runs on
+//       that text and is merged over the synthesized intent.
+//
+// V2 is gated server-side behind isLabsV2Enabled() — the picker UI
+// is already flag-gated, but this prevents a stray curl from
+// exercising the V2 path on a production deploy where the flag is
+// off. The flip from V2-off to V2-on in prod is a Vercel env-var
+// change, not a code change (ADR-0004).
 //
 // The route is intentionally isolated from the rest of the app —
 // it doesn't touch any other API surface, and its only shared
@@ -24,6 +44,15 @@ import { writeRecommendation } from '@/lib/labs/recommender'
 import { evaluate } from '@/lib/labs/evaluator'
 import { Tracer } from '@/lib/labs/trace'
 import { logAgentRun } from '@/lib/labs/query-logger'
+import { isLabsV2Enabled } from '@/lib/labs/feature-flags'
+import { MODES, type ModifierId } from '@/lib/labs/modes'
+import {
+  isModeId,
+  isModifierId,
+  mergeParsedOverSynth,
+  synthesizeIntent,
+  type PickerLocation,
+} from '@/lib/labs/intent-synthesizer'
 import type { AgentRun, ParsedIntent, Recommendation, RetrievalResult } from '@/lib/labs/types'
 
 export const runtime = 'nodejs'
@@ -31,12 +60,26 @@ export const runtime = 'nodejs'
 const MAX_QUERY_LEN = 500
 
 export async function POST(req: NextRequest) {
-  let body: { query?: unknown }
+  let body: Record<string, unknown>
   try {
-    body = await req.json()
+    body = (await req.json()) as Record<string, unknown>
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
+
+  // Dispatch on payload shape. V2 = picker = a string `mode` field.
+  // V1 = legacy = a string `query` field with no `mode`.
+  if (typeof body.mode === 'string') {
+    return handleV2(body)
+  }
+  return handleV1(body)
+}
+
+// ── V1 free-text path ────────────────────────────────────────
+// Unchanged contract from /labs today. Kept in its own function so
+// the V1 and V2 branches stay legible side-by-side.
+
+async function handleV1(body: Record<string, unknown>): Promise<NextResponse> {
   const query = typeof body.query === 'string' ? body.query.trim() : ''
   if (!query) {
     return NextResponse.json({ error: 'Missing "query" string' }, { status: 400 })
@@ -50,23 +93,148 @@ export async function POST(req: NextRequest) {
 
   const tracer = new Tracer()
 
+  let intent: ParsedIntent
+  try {
+    intent = await tracer.span('intent_parser', async (ctx) => {
+      const { intent: parsed, usage } = await parseIntent(query)
+      ctx.setLlmUsage(usage)
+      return parsed
+    })
+  } catch (err) {
+    return finalizeFatal(tracer, query, null, err)
+  }
+
+  return executePipeline({ intent, queryStr: query, tracer })
+}
+
+// ── V2 picker path ───────────────────────────────────────────
+
+async function handleV2(body: Record<string, unknown>): Promise<NextResponse> {
+  // Defense-in-depth: the UI is already flag-gated, but block the
+  // V2 payload server-side so a misconfigured deploy or a stray
+  // curl can't exercise the V2 branch when the flag is off.
+  if (!isLabsV2Enabled()) {
+    return NextResponse.json(
+      { error: 'Labs V2 is not enabled in this environment' },
+      { status: 400 }
+    )
+  }
+
+  // ── Validate payload ──────────────────────────────────────
+  if (!isModeId(body.mode)) {
+    return NextResponse.json(
+      { error: 'Invalid "mode" — expected one of the registered ModeIds' },
+      { status: 400 }
+    )
+  }
+  const mode = body.mode
+
+  if (!Array.isArray(body.modifiers) || !body.modifiers.every(isModifierId)) {
+    return NextResponse.json(
+      { error: 'Invalid "modifiers" — expected an array of registered ModifierIds' },
+      { status: 400 }
+    )
+  }
+  const modifiers = body.modifiers as ModifierId[]
+
+  const locationResult = parseLocation(body.location)
+  if (locationResult === 'invalid') {
+    return NextResponse.json(
+      {
+        error:
+          'Invalid "location" — expected null or { city?: string, neighborhood?: string }',
+      },
+      { status: 400 }
+    )
+  }
+  const location = locationResult
+
+  if (body.weekday != null && typeof body.weekday !== 'string') {
+    return NextResponse.json(
+      { error: 'Invalid "weekday" — expected string or null' },
+      { status: 400 }
+    )
+  }
+  const weekday = (body.weekday as string | undefined) ?? null
+
+  const queryText = typeof body.query === 'string' ? body.query.trim() : ''
+  if (mode === 'other' && !queryText) {
+    return NextResponse.json(
+      { error: 'Mode "other" requires a non-empty "query" string' },
+      { status: 400 }
+    )
+  }
+  if (queryText.length > MAX_QUERY_LEN) {
+    return NextResponse.json(
+      { error: `Query exceeds ${MAX_QUERY_LEN} characters` },
+      { status: 400 }
+    )
+  }
+
+  // ── Resolve intent ────────────────────────────────────────
+  const tracer = new Tracer()
+  let intent: ParsedIntent
+
+  if (mode === 'other') {
+    // Pure free-text — same as V1, just nested under the V2 branch
+    // so the gating + validation rules above still apply.
+    try {
+      intent = await tracer.span('intent_parser', async (ctx) => {
+        const { intent: parsed, usage } = await parseIntent(queryText)
+        ctx.setLlmUsage(usage)
+        return parsed
+      })
+    } catch (err) {
+      return finalizeFatal(tracer, queryText, null, err)
+    }
+  } else {
+    // Synthesize from picker payload. The span emits an
+    // `intent_parser` event with no `llm` field attached when the
+    // user did not also type text — that's the signal to the trace
+    // UI and /labs/eval that this intent came from the picker.
+    try {
+      intent = await tracer.span('intent_parser', async (ctx) => {
+        const synth = synthesizeIntent({ mode, modifiers, location, weekday })
+        if (!queryText) return synth
+
+        // User picked a mode AND typed text. Parse the text and
+        // overlay it on the synthesized base — parsed scalars win,
+        // arrays union, parsed priorities override. The extra parse
+        // costs one Claude call (same as V1) and surfaces real
+        // signal the user gave us (e.g. "near the F train").
+        const { intent: parsed, usage } = await parseIntent(queryText)
+        ctx.setLlmUsage(usage)
+        return mergeParsedOverSynth(synth, parsed)
+      })
+    } catch (err) {
+      return finalizeFatal(tracer, queryText || MODES[mode].exampleQuery, null, err)
+    }
+  }
+
+  // Use the user's typed text for the run's `query` field when present;
+  // otherwise fall back to the mode's exampleQuery so logs and the
+  // trace UI have something human-readable to display.
+  const queryForLog = queryText || MODES[mode].exampleQuery
+  return executePipeline({ intent, queryStr: queryForLog, tracer })
+}
+
+// ── Shared post-intent pipeline ──────────────────────────────
+// Everything after the intent is resolved is identical between V1
+// and V2: retrieve → score → recommend → evaluate → finalize.
+
+async function executePipeline({
+  intent,
+  queryStr,
+  tracer,
+}: {
+  intent: ParsedIntent
+  queryStr: string
+  tracer: Tracer
+}): Promise<NextResponse> {
   let recommendation: Recommendation | null = null
   let evaluation: AgentRun['evaluation'] = null
-  // Hoisted so the logger can still record the parsed intent even if a
-  // later stage throws — coverage-gap analytics depend on city /
-  // neighborhood from intent, not just from successful runs.
-  let intentForLog: ParsedIntent | null = null
 
   try {
-    // 1. Parse intent
-    const intent: ParsedIntent = await tracer.span('intent_parser', async (ctx) => {
-      const { intent, usage } = await parseIntent(query)
-      ctx.setLlmUsage(usage)
-      return intent
-    })
-    intentForLog = intent
-
-    // 2. Retrieve candidates
     const retrieval: RetrievalResult = await tracer.span('retriever', async () => {
       return retrieveCafes(intent)
     })
@@ -74,22 +242,19 @@ export async function POST(req: NextRequest) {
     if (retrieval.candidates.length === 0) {
       // Bail with a still-useful trace.
       const run = tracer.finalize({
-        query,
+        query: queryStr,
         recommendation: null,
         evaluation: null,
         fatal: { message: 'No candidate cafes found' },
       })
-      // Fire-and-forget; never awaited so we don't block the response.
-      void logAgentRun({ run, intent: intentForLog })
+      void logAgentRun({ run, intent })
       return NextResponse.json(run, { status: 200 })
     }
 
-    // 3. Score fit
     const scored = await tracer.span('fit_scorer', async () => {
       return scoreCandidates(intent, retrieval.candidates)
     })
 
-    // 4. Write recommendation
     recommendation = await tracer.span('recommender', async (ctx) => {
       const { recommendation, usage } = await writeRecommendation({
         intent,
@@ -100,10 +265,9 @@ export async function POST(req: NextRequest) {
       return recommendation
     })
 
-    // 5. Evaluate
     evaluation = await tracer.span('evaluator', async (ctx) => {
       const { evaluation, usage } = await evaluate({
-        originalQuery: query,
+        originalQuery: queryStr,
         intent,
         recommendation: recommendation!,
       })
@@ -111,21 +275,66 @@ export async function POST(req: NextRequest) {
       return evaluation
     })
 
-    const run = tracer.finalize({ query, recommendation, evaluation })
-    void logAgentRun({ run, intent: intentForLog })
+    const run = tracer.finalize({ query: queryStr, recommendation, evaluation })
+    void logAgentRun({ run, intent })
     return NextResponse.json(run, { status: 200 })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     const run = tracer.finalize({
-      query,
+      query: queryStr,
       recommendation,
       evaluation,
       fatal: { message },
     })
-    void logAgentRun({ run, intent: intentForLog })
-    // Use 200 + fatal flag so the client can still render the
-    // partial trace for debugging — the alternative (500) hides
-    // useful observability data behind a generic error toast.
+    void logAgentRun({ run, intent })
+    // 200 + fatal flag so the client can still render the partial
+    // trace for debugging — alternative (500) hides observability
+    // data behind a generic error toast.
     return NextResponse.json(run, { status: 200 })
+  }
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+
+function finalizeFatal(
+  tracer: Tracer,
+  queryStr: string,
+  intentForLog: ParsedIntent | null,
+  err: unknown
+): NextResponse {
+  const message = err instanceof Error ? err.message : String(err)
+  const run = tracer.finalize({
+    query: queryStr,
+    recommendation: null,
+    evaluation: null,
+    fatal: { message },
+  })
+  void logAgentRun({ run, intent: intentForLog })
+  return NextResponse.json(run, { status: 200 })
+}
+
+/**
+ * Validate the `location` field of a V2 picker payload.
+ *
+ * Returns:
+ *   - PickerLocation when valid
+ *   - null when absent (user didn't supply one)
+ *   - 'invalid' when present but malformed (caller should 400)
+ */
+function parseLocation(value: unknown): PickerLocation | null | 'invalid' {
+  if (value == null) return null
+  if (typeof value !== 'object') return 'invalid'
+  const obj = value as Record<string, unknown>
+  const city = obj.city
+  const neighborhood = obj.neighborhood
+  if (city != null && typeof city !== 'string') return 'invalid'
+  if (neighborhood != null && typeof neighborhood !== 'string') return 'invalid'
+  // Trim and normalize empty strings to null so a blank picker field
+  // doesn't filter the retriever to "city == ''" → zero candidates.
+  const cityStr = typeof city === 'string' ? city.trim() : ''
+  const nhoodStr = typeof neighborhood === 'string' ? neighborhood.trim() : ''
+  return {
+    city: cityStr || null,
+    neighborhood: nhoodStr || null,
   }
 }

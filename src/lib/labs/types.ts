@@ -32,6 +32,12 @@ export interface ParsedIntent {
   timeOfDay: string | null // "after 6pm", "morning", "now"
   startTimeIso: string | null // resolved absolute time if computable
   durationMinutes: number | null
+  /** Day of week the user is planning for, e.g. "saturday". Set by the
+   *  V2 picker (ticket #7) from the picker's weekday widget; not yet
+   *  consumed by retriever/scorer — present so logger captures it for
+   *  coverage-gap analytics and a future ticket can teach the pipeline
+   *  to use it. Null when the user did not specify a day. */
+  weekday: string | null
 
   /** Environment constraints. */
   noiseTolerance: NoiseLevel | null // user's max tolerated noise

@@ -125,7 +125,18 @@ export interface Mode {
 export interface Modifier {
   id: ModifierId
   label: string
-  /** Constraints layered on the chosen mode's. Override-on-overlap. */
+  /** Constraints layered on the chosen mode's. The synthesizer folds
+   *  these with an asymmetric rule:
+   *   - Scalar fields (noiseTolerance, openAfter, timeOfDay, the
+   *     boolean needsX flags) — modifier OVERRIDES mode on overlap.
+   *   - Array fields (vibe, avoid, preferredTypes) — modifier value
+   *     is UNIONed with mode's and de-duplicated (case-sensitive).
+   *
+   *  Rationale: a modifier like "Quiet enough to read" should ADD a
+   *  vibe constraint, not erase the mode's atmospheric defaults. None
+   *  of today's modifiers redefine arrays, so this docstring exists
+   *  to lock the rule in before someone authors one that does.
+   *  See src/lib/labs/intent-synthesizer.ts. */
   hardConstraints?: HardConstraints
   /** Per-component weight bumps. The synthesizer clamps the
    *  resulting weight to 0..3. */

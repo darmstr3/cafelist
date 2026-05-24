@@ -74,6 +74,10 @@ export async function parseIntent(rawQuery: string): Promise<IntentParserResult>
     startTimeIso: data.startTimeIso ?? null,
     durationMinutes:
       typeof data.durationMinutes === 'number' ? data.durationMinutes : null,
+    // The V1 free-text parser doesn't extract weekday; the V2 picker
+    // supplies it directly. Default null so the ParsedIntent type
+    // stays satisfied without changing the LLM prompt schema.
+    weekday: typeof data.weekday === 'string' ? data.weekday : null,
     noiseTolerance: data.noiseTolerance ?? null,
     vibe: Array.isArray(data.vibe) ? data.vibe : [],
     needsOutlets: data.needsOutlets ?? null,
