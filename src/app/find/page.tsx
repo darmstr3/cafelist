@@ -38,12 +38,14 @@ interface RankedSpot {
   distance_meters?: number
 }
 
+// Note: keeping the 4 canonical modes from LABS_V2_PLAN MVP. `study_session`
+// is in the registry on feat/labs-v2-recommend-route but not on main yet;
+// adding it here would break the type check until that branch lands.
 const MODE_ORDER: ModeId[] = [
   'deep_work',
   'creative_reset',
   'coffee_date',
   'client_meeting',
-  'study_session',
 ]
 
 const MODIFIER_ORDER: ModifierId[] = ['open_late', 'quiet_to_read']
