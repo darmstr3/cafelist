@@ -298,7 +298,7 @@ async function executePipeline({
         // Address is the most disambiguating — Google Maps will resolve
         // "{name}, {address}" to the right pin nearly every time. Fall
         // back to name + neighborhood + city when address is missing.
-        if (spot.address) return `${spot.spotName ?? spot.name}, ${spot.address}`
+        if (spot.address) return `${spot.name}, ${spot.address}`
         const locality = spot.neighborhood ?? spot.city
         return locality ? `${spot.name} ${locality}` : spot.name
       }
