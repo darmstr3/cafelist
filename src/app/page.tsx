@@ -1,13 +1,17 @@
 import Link from 'next/link'
 import { SpotsDirectory } from '@/components/SpotsDirectory'
+import { NearMeBanner } from '@/components/NearMeBanner'
+import { UserMenu } from '@/components/UserMenu'
 import { getSpots, getCities } from '@/lib/spots'
+import { getCurrentUser } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
-  const [{ spots, serviceError }, cities] = await Promise.all([
+  const [{ spots, serviceError }, cities, user] = await Promise.all([
     getSpots(),
     getCities().catch(() => []),
+    getCurrentUser().catch(() => null),
   ])
 
   return (
@@ -39,13 +43,7 @@ export default async function HomePage() {
               middleware while still in-progress. Access it via /labs directly
               with admin credentials. */}
           <div className="ml-auto flex items-center gap-3">
-            <Link
-              href="/near-me"
-              className="text-[11px] font-medium transition-opacity hover:opacity-80 flex items-center gap-1"
-              style={{ color: 'var(--accent)' }}
-            >
-              📍 Near me
-            </Link>
+            <UserMenu initialUser={user} />
             <Link
               href="/submit"
               className="text-[11px] font-medium transition-opacity hover:opacity-80"
@@ -56,6 +54,9 @@ export default async function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* ── Near-me hero banner (always-visible CTA) ── */}
+      <NearMeBanner />
 
       {/* ── Directory ── */}
       {serviceError ? (

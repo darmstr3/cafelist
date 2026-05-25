@@ -1,23 +1,19 @@
 // ─────────────────────────────────────────────────────────────
-// Admin gate: HTTP Basic Auth in front of /admin/* and any
-// mutating admin API routes.
+// Middleware does two unrelated things:
 //
-// Why Basic Auth: cafelist has a single operator (Donovan), no
-// account system, and the goal here is "stop random visitors from
-// browsing /admin and pressing the approve button" — not enterprise
-// SSO. Basic Auth gets that done in 50 lines without taking on a
-// session store. Upgrade to Clerk/Supabase Auth when there's a
-// second operator.
+// 1. Supabase auth session refresh (all paths). Without this,
+//    auth cookies expire silently and signed-in users get logged
+//    out after the access token's short TTL.
 //
-// Setup: set ADMIN_PASSWORD (and optionally ADMIN_USERNAME) on
-// Vercel. Locally, set it in .env.local — the gate silently
-// no-ops when the password is unset, so dev stays frictionless.
-// In production we fail closed: if the env var is missing on
-// Vercel, the gate blocks all traffic to the protected paths
-// with a 503 so we never accidentally ship an open admin panel.
+// 2. Admin gate via HTTP Basic Auth on /admin/* and the mutating
+//    admin API routes. This is separate from Supabase user auth —
+//    Donovan logs into admin with a shared username/password set
+//    via ADMIN_PASSWORD env var; site visitors authenticate with
+//    Supabase magic links (different surface, different concern).
 // ─────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
 
 const PROTECTED_PREFIXES = [
   '/admin',
@@ -68,67 +64,89 @@ function unauthorized(): NextResponse {
   })
 }
 
-export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl
-  if (!isProtected(pathname, req.method)) return NextResponse.next()
+/** Refresh the Supabase auth cookies, attached to the response. */
+async function refreshSupabaseSession(req: NextRequest, res: NextResponse) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!supabaseUrl || !supabaseAnonKey) return res
 
-  const expected = process.env.ADMIN_PASSWORD
-  const username = process.env.ADMIN_USERNAME ?? 'admin'
-  const isProd = process.env.VERCEL_ENV === 'production'
-
-  if (!expected) {
-    // Fail closed in prod, open in dev. This stops us from ever
-    // shipping an open admin panel because we forgot to set the var.
-    if (isProd) {
-      return new NextResponse(
-        'admin gate misconfigured: ADMIN_PASSWORD env var is not set',
-        { status: 503 },
-      )
-    }
-    return NextResponse.next()
-  }
-
-  const header = req.headers.get('authorization') ?? ''
-  if (!header.toLowerCase().startsWith('basic ')) return unauthorized()
-
-  // atob is available in the edge runtime where middleware runs.
-  let decoded = ''
-  try {
-    decoded = atob(header.slice(6).trim())
-  } catch {
-    return unauthorized()
-  }
-
-  const sepIdx = decoded.indexOf(':')
-  if (sepIdx < 0) return unauthorized()
-  const user = decoded.slice(0, sepIdx)
-  const pass = decoded.slice(sepIdx + 1)
-
-  // Constant-time-ish compare via length-padded equality. Basic Auth
-  // is already over TLS, so this is mainly defense-in-depth.
-  if (user !== username || pass.length !== expected.length) return unauthorized()
-  let mismatch = 0
-  for (let i = 0; i < expected.length; i++) {
-    mismatch |= pass.charCodeAt(i) ^ expected.charCodeAt(i)
-  }
-  if (mismatch !== 0) return unauthorized()
-
-  return NextResponse.next()
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return req.cookies.getAll()
+      },
+      setAll(toSet) {
+        toSet.forEach(({ name, value, options }) => {
+          res.cookies.set(name, value, options)
+        })
+      },
+    },
+  })
+  // Touching getUser() triggers a session refresh if needed.
+  await supabase.auth.getUser()
+  return res
 }
 
-// Run middleware on the same paths we gate plus a small wildcard
-// for /api/spots and /api/reviews so the per-id write paths hit it.
-// Matchers must be static strings; the per-method filtering happens
-// inside isProtected().
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl
+
+  // (1) Admin gate first — admin paths must be locked before anything else
+  //     touches them.
+  if (isProtected(pathname, req.method)) {
+    const expected = process.env.ADMIN_PASSWORD
+    const username = process.env.ADMIN_USERNAME ?? 'admin'
+    const isProd = process.env.VERCEL_ENV === 'production'
+
+    if (!expected) {
+      if (isProd) {
+        return new NextResponse(
+          'admin gate misconfigured: ADMIN_PASSWORD env var is not set',
+          { status: 503 },
+        )
+      }
+      // dev: fall through to Supabase refresh
+    } else {
+      const header = req.headers.get('authorization') ?? ''
+      if (!header.toLowerCase().startsWith('basic ')) return unauthorized()
+
+      let decoded = ''
+      try {
+        decoded = atob(header.slice(6).trim())
+      } catch {
+        return unauthorized()
+      }
+
+      const sepIdx = decoded.indexOf(':')
+      if (sepIdx < 0) return unauthorized()
+      const user = decoded.slice(0, sepIdx)
+      const pass = decoded.slice(sepIdx + 1)
+
+      if (user !== username || pass.length !== expected.length) return unauthorized()
+      let mismatch = 0
+      for (let i = 0; i < expected.length; i++) {
+        mismatch |= pass.charCodeAt(i) ^ expected.charCodeAt(i)
+      }
+      if (mismatch !== 0) return unauthorized()
+    }
+  }
+
+  // (2) Refresh Supabase auth cookies on every request that reaches here.
+  //     This keeps signed-in users signed in across requests.
+  return refreshSupabaseSession(req, NextResponse.next())
+}
+
+// Match all paths except Next.js static assets, the public dir, and image
+// optimizer outputs. This runs middleware on /, /near-me, /spot/[id], /login,
+// /auth/callback, etc. — everything that needs auth-cookie refresh.
 export const config = {
   matcher: [
-    '/admin',
-    '/admin/:path*',
-    '/api/import',
-    '/api/spots/:path*',
-    '/api/reviews/:path*',
-    '/labs',
-    '/labs/:path*',
-    '/api/labs/:path*',
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public files (e.g. svgs in /public)
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
