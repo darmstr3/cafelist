@@ -285,19 +285,33 @@ async function executePipeline({
         spots: retrieval.candidates,
       })
       ctx.setLlmUsage(usage)
-      // Attach the URL slug to each pick so the UI can render
-      // /spot/[slug] links. The LLM doesn't emit slugs (and we don't
-      // want to teach it to — it's a leak of internal IDs); the route
-      // looks them up from the retrieved spots after the fact.
-      const slugById = new Map(retrieval.candidates.map((s) => [s.id, s.slug]))
+      // Attach (1) the URL slug, and (2) a Google Maps search query
+      // to each pick. The LLM doesn't emit either — it only emits
+      // spotId/spotName. The route looks both up from the retrieved
+      // spots after the fact. The card uses gmapsQuery to open Google
+      // Maps directly: users asking "find me a café" want directions,
+      // not an in-app detail screen.
+      const spotById = new Map(retrieval.candidates.map((s) => [s.id, s]))
+      const mapQueryFor = (id: string): string | undefined => {
+        const spot = spotById.get(id)
+        if (!spot) return undefined
+        // Address is the most disambiguating — Google Maps will resolve
+        // "{name}, {address}" to the right pin nearly every time. Fall
+        // back to name + neighborhood + city when address is missing.
+        if (spot.address) return `${spot.spotName ?? spot.name}, ${spot.address}`
+        const locality = spot.neighborhood ?? spot.city
+        return locality ? `${spot.name} ${locality}` : spot.name
+      }
       recommendation.picks = recommendation.picks.map((p) => ({
         ...p,
-        slug: slugById.get(p.spotId) ?? undefined,
+        slug: spotById.get(p.spotId)?.slug,
+        gmapsQuery: mapQueryFor(p.spotId),
       }))
       if (recommendation.backup) {
         recommendation.backup = {
           ...recommendation.backup,
-          slug: slugById.get(recommendation.backup.spotId) ?? undefined,
+          slug: spotById.get(recommendation.backup.spotId)?.slug,
+          gmapsQuery: mapQueryFor(recommendation.backup.spotId),
         }
       }
       return recommendation

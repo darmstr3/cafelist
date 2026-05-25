@@ -270,78 +270,13 @@ export async function retrieveCafes(intent: ParsedIntent): Promise<RetrievalResu
     }
   }
 
-  // Thin-coverage widening — when the user specified a neighborhood
-  // and we ended up with fewer than MIN_HEALTHY_CANDIDATES after all
-  // hard filters, expand to the neighborhood's walkable adjacency
-  // cluster and re-apply the same gates. We do this ONCE; we do not
-  // recursively widen. Surfaces in filtersApplied so the trace UI can
-  // explain "Best fit in West Village; also considered nearby."
-  //
-  // We deliberately apply this AFTER workability + open_after so
-  // widening only kicks in when the in-neighborhood data is genuinely
-  // thin against the user's intent — not just thin in absolute terms.
-  if (
-    intent.neighborhood &&
-    candidates.length < MIN_HEALTHY_CANDIDATES &&
-    spots.length > candidates.length
-  ) {
-    const cluster = adjacencyClusterFor(intent.neighborhood)
-    if (cluster && cluster.length > 0) {
-      const clusterSet = new Set(cluster.map((n) => n.toLowerCase()))
-      const existingIds = new Set(candidates.map((c) => c.id))
-      const preferredTypeSet =
-        intent.preferredTypes.length > 0 ? new Set(intent.preferredTypes) : null
-      const openAfterThreshold = intent.openAfter ? parseHHMM(intent.openAfter) : null
-
-      const widened = spots.filter((s) => {
-        if (existingIds.has(s.id)) return false
-        const n = (s.neighborhood ?? '').toLowerCase()
-        if (!clusterSet.has(n)) return false
-        // Re-apply the same hard gates the in-neighborhood set passed.
-        if (preferredTypeSet && !preferredTypeSet.has(s.type)) return false
-        // Workability: prefer strict ≥6, but if the in-neighborhood set
-        // had to relax we mirror that relaxation here too. We detect
-        // the relaxation by inspecting the filtersApplied trail rather
-        // than re-running the two-stage logic.
-        const wasRelaxed = filtersApplied.some((f) =>
-          f.startsWith(`workability≥${WORKABILITY_RELAXED_MIN}-loosened`)
-        )
-        if (wasRelaxed) {
-          if (
-            s.workability_score != null &&
-            s.workability_score < WORKABILITY_RELAXED_MIN
-          ) {
-            return false
-          }
-          // null workability allowed under relaxed pass
-        } else {
-          if (
-            s.workability_score == null ||
-            s.workability_score < WORKABILITY_STRICT_MIN
-          ) {
-            return false
-          }
-        }
-        // open_after — exact same check as the in-neighborhood pass.
-        if (openAfterThreshold !== null) {
-          const close = closingTimeToday(s.hours)
-          if (!close) return false
-          const closeMin = parseHHMM(close)
-          if (closeMin === null) return false
-          const effectiveClose = closeMin === 0 ? 24 * 60 : closeMin
-          if (effectiveClose < openAfterThreshold) return false
-        }
-        return true
-      })
-
-      if (widened.length > 0) {
-        candidates = [...candidates, ...widened]
-        filtersApplied.push(
-          `thin-coverage-widened-to-adjacent=${cluster.length}-nhoods-added-${widened.length}`
-        )
-      }
-    }
-  }
+  // No silent widening. If the user asked for West Village we do not
+  // serve SoHo with a sorry-face. Returning a thin set (or zero) and
+  // letting the UI surface "we don't have coverage there yet" is
+  // honest; widening looked like the agent didn't listen. The
+  // adjacency map below is kept for the route's empty-state path,
+  // which suggests ONE alternative rather than mixing in nearby
+  // results pretending they answer the question.
 
   // Rank by workability_score first (Curator-driven), falling back to
   // work_score when workability is null. The Curator score is a better

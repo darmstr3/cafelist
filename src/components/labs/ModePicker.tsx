@@ -97,10 +97,36 @@ interface Props {
   submitting?: boolean
 }
 
+/**
+ * Modifier defaults inferred from the user's current local time.
+ * "Open late" pre-toggles after 6pm — if you're picking a café at
+ * 9pm you almost certainly want one that stays open past 9pm, and
+ * making the user think about it was the friction Donovan flagged
+ * on May 25 ("the open late section is annoying. infer some shit
+ * based on their time"). The user can still untoggle.
+ *
+ * Lazy-initialized via `useState(() => …)` so the inference runs
+ * exactly once at mount. We avoid using `useEffect(setState)` here
+ * because the flash-of-empty-pills before the effect runs would
+ * look like a bug.
+ */
+function initialModifiersFromTime(): Set<ModifierId> {
+  const set = new Set<ModifierId>()
+  // Browser local hour. SSR ships an empty set; the client-side
+  // mount uses this initializer. The brief mismatch is invisible
+  // because the parent only renders this component on the client
+  // ('use client') and the Set is internal state.
+  if (typeof window !== 'undefined') {
+    const hour = new Date().getHours()
+    if (hour >= 18) set.add('open_late')
+  }
+  return set
+}
+
 export function ModePicker({ onSubmit, submitting = false }: Props) {
   const [selectedMode, setSelectedMode] = useState<ModeId | null>(null)
   const [selectedModifiers, setSelectedModifiers] = useState<Set<ModifierId>>(
-    () => new Set()
+    initialModifiersFromTime
   )
   const [modeFreeform, setModeFreeform] = useState('')
   const [location, setLocation] = useState('')

@@ -159,20 +159,25 @@ export const MODES: Record<ModeId, Mode> = {
   // remote worker should be camping at for hours; coworking spaces
   // are workable but typically gated, so we keep them out until we
   // model membership.
+  //
+  // NOTE (May 25): needsOutlets removed from Deep Work + Study session.
+  // Most NYC cafés have *some* outlets but the data is unreliable —
+  // requiring outlets as a HARD filter was killing otherwise-good
+  // West Village picks. Outlets stay in the picker's wishlist via
+  // free-text "Anything else?" until we have better per-spot signal.
   deep_work: {
     id: 'deep_work',
     label: 'Deep Work',
-    blurb: 'Heads-down stretch with outlets, wifi, and quiet to focus.',
+    blurb: 'Heads-down stretch with wifi and quiet to focus.',
     hardConstraints: {
       noiseTolerance: 'quiet',
-      needsOutlets: true,
       needsWifi: true,
       laptopFriendly: true,
       preferredTypes: ['coffee_shop'],
     },
     weights: { location: 2, time: 2, noise: 3, features: 3, vibe: 1 },
     exampleQuery:
-      'Quiet spot with outlets and wifi where I can post up with my laptop for a few hours.',
+      'Quiet spot with wifi where I can post up with my laptop for a few hours.',
   },
 
   // TODO(data-agent, ticket #6): Tune Study session's hardConstraints
@@ -184,10 +189,9 @@ export const MODES: Record<ModeId, Mode> = {
   study_session: {
     id: 'study_session',
     label: 'Study session',
-    blurb: 'Long stretch with textbooks or notes — quiet, outlets, table space.',
+    blurb: 'Long stretch with textbooks or notes — quiet, table space.',
     hardConstraints: {
       noiseTolerance: 'quiet',
-      needsOutlets: true,
       needsWifi: true,
       laptopFriendly: true,
       vibe: ['cozy', 'calm'],
@@ -195,7 +199,7 @@ export const MODES: Record<ModeId, Mode> = {
     },
     weights: { location: 2, time: 2, noise: 3, features: 3, vibe: 2 },
     exampleQuery:
-      'Quiet spot to study for a few hours — outlets, room for textbooks and a laptop, not too crowded.',
+      'Quiet spot to study for a few hours — room for textbooks and a laptop, not too crowded.',
   },
 
   creative_reset: {

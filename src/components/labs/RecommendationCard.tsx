@@ -1,27 +1,35 @@
 // ─────────────────────────────────────────────────────────────
 // RecommendationCard — shared result card for the /labs surface.
 //
-// Renders the final Recommendation produced by the agent pipeline:
-// a one-line summary, the ranked picks (with name + one-liner +
-// honest tradeoff), an optional backup pick, and the confidence /
-// caveats line at the bottom.
+// Renders the final Recommendation produced by the agent pipeline.
+// We deliberately omit confidence / caveats from the user-facing
+// output (May 25 product call: "no one cares about low confidence
+// results"). The agent still computes them and the trace UI / eval
+// harness still reads them — they're just hidden from the surface
+// the user reads. If a recommendation is genuinely bad the path is
+// to return fewer picks, not to label them with apology copy.
 //
-// Originally lived inline inside LabsExperience.tsx (V1 free-text).
-// Extracted here so the V2 picker surface (LabsV2Experience) can
-// render the same card without duplication. Visual language is
-// unchanged from V1 — same warm-light palette, same Fraunces summary,
-// same rounded card with numbered list — so a user moving between
-// the two entry points sees a consistent result.
+// Picks link out to Google Maps (gmapsQuery → /maps/search). Users
+// asking "find me a café" want directions, not another in-app
+// screen — opening Maps in a new tab matches the actual job.
 // ─────────────────────────────────────────────────────────────
 
-import Link from 'next/link'
 import { ExternalLink } from 'lucide-react'
-import type { Recommendation } from '@/lib/labs/types'
+import type { Recommendation, RecommendationPick } from '@/lib/labs/types'
+
+function gmapsHref(p: RecommendationPick): string {
+  // Always linkable: fall back to spotName if the route didn't attach
+  // a gmapsQuery (older fixtures, eval harness, etc.). encodeURIComponent
+  // handles spaces, commas, and apostrophes for café names like
+  // "Hell's Kitchen Coffee."
+  const q = p.gmapsQuery ?? p.spotName
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
+}
 
 export function RecommendationCard({ rec }: { rec: Recommendation }) {
   return (
     <div
-      className="rounded-xl border p-5 space-y-5"
+      className="rounded-2xl border p-5 space-y-5"
       style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}
     >
       <p
@@ -35,7 +43,7 @@ export function RecommendationCard({ rec }: { rec: Recommendation }) {
         {rec.picks.map((p, i) => (
           <li
             key={p.spotId}
-            className="flex gap-3 p-3 rounded-lg"
+            className="flex gap-3 p-3 rounded-xl"
             style={{ backgroundColor: 'var(--surface-2)' }}
           >
             <span
@@ -48,28 +56,22 @@ export function RecommendationCard({ rec }: { rec: Recommendation }) {
               {i + 1}
             </span>
             <div className="space-y-1 min-w-0 flex-1">
-              {/* Name links to /spot/[slug] when the route attached
-                  a slug. Falls back to plain text if the pick came
-                  from a path that doesn't backfill slug (e.g. older
-                  fixtures, eval harness). */}
               <div className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
-                {p.slug ? (
-                  <Link
-                    href={`/spot/${p.slug}`}
-                    className="inline-flex items-center gap-1 transition-opacity hover:opacity-70"
-                  >
-                    {p.spotName}
-                    <ExternalLink size={11} aria-hidden="true" />
-                  </Link>
-                ) : (
-                  p.spotName
-                )}
+                <a
+                  href={gmapsHref(p)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 transition-opacity hover:opacity-70"
+                >
+                  {p.spotName}
+                  <ExternalLink size={11} aria-hidden="true" />
+                </a>
               </div>
               <div className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                 {p.oneLiner}
               </div>
               <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-                Tradeoff: {p.tradeoff}
+                {p.tradeoff}
               </div>
             </div>
           </li>
@@ -78,44 +80,25 @@ export function RecommendationCard({ rec }: { rec: Recommendation }) {
 
       {rec.backup && (
         <div
-          className="text-sm p-3 rounded-lg border"
+          className="text-sm p-3 rounded-xl border"
           style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}
         >
           <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
             Backup:
           </span>{' '}
-          {rec.backup.slug ? (
-            <Link
-              href={`/spot/${rec.backup.slug}`}
-              className="font-medium inline-flex items-center gap-1 transition-opacity hover:opacity-70"
-              style={{ color: 'var(--text-primary)' }}
-            >
-              {rec.backup.spotName}
-              <ExternalLink size={11} aria-hidden="true" />
-            </Link>
-          ) : (
-            <span className="font-medium">{rec.backup.spotName}</span>
-          )}{' '}
+          <a
+            href={gmapsHref(rec.backup)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium inline-flex items-center gap-1 transition-opacity hover:opacity-70"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            {rec.backup.spotName}
+            <ExternalLink size={11} aria-hidden="true" />
+          </a>{' '}
           — {rec.backup.oneLiner}
         </div>
       )}
-
-      <div className="text-[12px] space-y-1" style={{ color: 'var(--text-muted)' }}>
-        <div>
-          <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>
-            Confidence:
-          </span>{' '}
-          {rec.confidenceNote}
-        </div>
-        {rec.caveats.length > 0 && (
-          <div>
-            <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>
-              Caveats:
-            </span>{' '}
-            {rec.caveats.join(' · ')}
-          </div>
-        )}
-      </div>
     </div>
   )
 }

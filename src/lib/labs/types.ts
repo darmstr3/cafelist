@@ -107,6 +107,12 @@ export interface RecommendationPick {
    *  looks up the slug from the retrieved spots and attaches it).
    *  Optional so older callers and fixtures still type-check. */
   slug?: string
+  /** Pre-built Google Maps search query. Populated by the route from
+   *  the spot's name + address — the pick row in the result UI uses
+   *  this to open Google Maps directly instead of routing the user
+   *  into our /spot/[slug] page. Users who want a recommendation
+   *  want directions, not another in-app detail screen. */
+  gmapsQuery?: string
 }
 
 export interface Recommendation {
