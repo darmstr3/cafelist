@@ -40,6 +40,13 @@ export default async function HomePage() {
               with admin credentials. */}
           <div className="ml-auto flex items-center gap-3">
             <Link
+              href="/near-me"
+              className="text-[11px] font-medium transition-opacity hover:opacity-80 flex items-center gap-1"
+              style={{ color: 'var(--accent)' }}
+            >
+              📍 Near me
+            </Link>
+            <Link
               href="/submit"
               className="text-[11px] font-medium transition-opacity hover:opacity-80"
               style={{ color: 'var(--text-muted)' }}

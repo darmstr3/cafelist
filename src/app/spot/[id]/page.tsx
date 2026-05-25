@@ -2,13 +2,13 @@ import { notFound } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import {
-  MapPin, Clock, Wifi, Zap, Volume2, Moon,
+  MapPin, Clock, Wifi, Zap,
   Bath, Utensils, Coffee, Monitor, ChevronLeft, Star, Navigation,
 } from 'lucide-react'
 import { getSpotBySlug, getReviewsBySpotId } from '@/lib/spots'
 import {
   isOpenNow, formatHoursDisplay, formatScore,
-  typeLabel, is24Hours, formatTime, isOpenAfter9pm, isOpenAfterMidnight,
+  typeLabel, is24Hours, formatTime,
 } from '@/lib/utils'
 import { ReviewForm } from '@/components/ReviewForm'
 import { Spot, SpotHours } from '@/types'
@@ -19,85 +19,74 @@ interface PageProps {
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
 
-// ── Verdicts: yes/ok/no per dimension, plus a one-word headline ────
+// ── Workability hero ───────────────────────────────────────────────
+// Replaces the old "verdict tiles" that fabricated red badges ("Spotty",
+// "Few", "Closes early") on every spot with no reviews. Now the page leads
+// with the actual editorial signal (workability_score) when present, and
+// is honest about not having one when absent.
 
-type VerdictState = 'yes' | 'kinda' | 'no' | 'unknown'
-
-interface Verdict {
-  state: VerdictState
-  word: string
+function workabilityLabel(score: number): { label: string; color: string; tone: string } {
+  if (score >= 8) return { label: 'Great for working', color: 'var(--yes)', tone: 'rgba(47,125,79,0.10)' }
+  if (score >= 6) return { label: 'Workable', color: 'var(--yes)', tone: 'rgba(47,125,79,0.08)' }
+  if (score >= 4) return { label: 'Workable with friction', color: 'var(--kinda)', tone: 'rgba(198,133,18,0.08)' }
+  return { label: 'Not really a work spot', color: 'var(--no)', tone: 'rgba(168,57,47,0.06)' }
 }
 
-function wifiVerdict(spot: Spot): Verdict {
-  if (!spot.has_wifi) return { state: 'no', word: 'No Wi-Fi' }
-  if (spot.wifi_score >= 6.5) return { state: 'yes', word: 'Strong' }
-  if (spot.wifi_score >= 4) return { state: 'kinda', word: 'OK' }
-  return { state: 'no', word: 'Spotty' }
-}
-
-function outletVerdict(spot: Spot): Verdict {
-  if (!spot.has_outlets) return { state: 'no', word: 'Few' }
-  if (spot.outlet_score >= 6.5) return { state: 'yes', word: 'Plenty' }
-  if (spot.outlet_score >= 4) return { state: 'kinda', word: 'Some' }
-  return { state: 'no', word: 'Few' }
-}
-
-function quietVerdict(spot: Spot): Verdict {
-  if (!spot.noise_level) return { state: 'unknown', word: '—' }
-  if (spot.noise_level === 'silent') return { state: 'yes', word: 'Silent' }
-  if (spot.noise_level === 'quiet') return { state: 'yes', word: 'Calm' }
-  if (spot.noise_level === 'moderate') return { state: 'kinda', word: 'Moderate' }
-  return { state: 'no', word: 'Loud' }
-}
-
-function lateVerdict(spot: Spot): Verdict {
-  if (is24Hours(spot.hours)) return { state: 'yes', word: 'Open 24h' }
-  if (isOpenAfterMidnight(spot.hours)) return { state: 'yes', word: 'Past midnight' }
-  if (isOpenAfter9pm(spot.hours)) {
-    // Try to surface the actual close time today, e.g. "Until 11pm"
-    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
-    const t = spot.hours?.[today as keyof SpotHours]
-    return { state: 'kinda', word: t ? `Until ${formatTime(t.close)}` : 'Open late' }
+function WorkabilityHero({ spot }: { spot: Spot }) {
+  // No editorial score yet — honest empty state, not red badges.
+  if (spot.workability_score == null) {
+    return (
+      <section
+        className="p-4 rounded-xl border mb-6"
+        style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border-subtle)' }}
+      >
+        <p
+          className="text-[11px] font-semibold uppercase tracking-wide mb-1"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          Not yet rated
+        </p>
+        <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+          We haven&apos;t given this spot a workability score yet. Check back soon, or leave a
+          review to help.
+        </p>
+      </section>
+    )
   }
-  return { state: 'no', word: 'Closes early' }
-}
 
-const VERDICT_STYLES: Record<VerdictState, { bg: string; color: string; border: string }> = {
-  yes:     { bg: 'rgba(47,125,79,0.10)',  color: 'var(--yes)',          border: 'rgba(47,125,79,0.25)' },
-  kinda:   { bg: 'rgba(198,133,18,0.10)', color: 'var(--kinda)',        border: 'rgba(198,133,18,0.25)' },
-  no:      { bg: 'rgba(168,57,47,0.08)',  color: 'var(--no)',           border: 'rgba(168,57,47,0.22)' },
-  unknown: { bg: 'var(--surface-2)',       color: 'var(--text-muted)',   border: 'var(--border)' },
-}
-
-function VerdictTile({
-  icon: Icon, label, verdict, score,
-}: {
-  icon: typeof Wifi
-  label: string
-  verdict: Verdict
-  score: number
-}) {
-  const s = VERDICT_STYLES[verdict.state]
+  const score = Number(spot.workability_score)
+  const meta = workabilityLabel(score)
   return (
-    <div
-      className="p-4 rounded-xl border flex flex-col gap-1"
-      style={{ backgroundColor: s.bg, borderColor: s.border }}
+    <section
+      className="p-5 rounded-xl border mb-6"
+      style={{ backgroundColor: meta.tone, borderColor: 'var(--border-subtle)' }}
     >
-      <div className="flex items-center justify-between">
-        <Icon size={16} style={{ color: s.color }} />
-        <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: s.color, opacity: 0.7 }}>
-          {label}
+      <div className="flex items-baseline gap-3 mb-2">
+        <span
+          className="text-[28px] font-bold leading-none"
+          style={{ color: meta.color }}
+        >
+          {score.toFixed(1)}
+        </span>
+        <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          / 10 workability
+        </span>
+        <span
+          className="ml-auto text-[11px] font-semibold uppercase tracking-wide"
+          style={{ color: meta.color }}
+        >
+          {meta.label}
         </span>
       </div>
-      <div className="text-base font-semibold leading-tight" style={{ color: s.color }}>
-        {verdict.word}
-      </div>
-      {verdict.state !== 'unknown' && (
-        <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-          {formatScore(score)} / 10
-        </div>
+      {spot.workability_reasoning && (
+        <p className="text-sm leading-relaxed italic" style={{ color: 'var(--text-secondary)' }}>
+          &ldquo;{spot.workability_reasoning}&rdquo;
+        </p>
       )}
-    </div>
+      <p className="text-[10px] mt-2" style={{ color: 'var(--text-muted)' }}>
+        Cafelist editorial — based on reviews, hours, and venue type
+      </p>
+    </section>
   )
 }
 
@@ -169,11 +158,8 @@ export default async function SpotDetailPage({ params }: PageProps) {
   const heroPhoto = spot.photos?.[0]
   const otherPhotos = spot.photos?.slice(1) ?? []
 
-  const verifiedDate = spot.last_verified_at
-    ? new Date(spot.last_verified_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    : null
-
-  // Brief §3.1: amenities are useful but secondary. Keep below verdict bar.
+  // Amenity strip — only shown for amenities we actually know about, no
+  // fabricated red badges for "we don't know".
   const amenities = [
     { icon: Wifi, label: 'Wi-Fi', active: spot.has_wifi },
     { icon: Zap, label: 'Outlets', active: spot.has_outlets },
@@ -272,37 +258,29 @@ export default async function SpotDetailPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* ── Trust block (3 inline signals) ── */}
+        {/* ── Trust block — honest metadata only ──
+            Removed "Verified by Donovan" — that was the system auto-stamping
+            last_verified_at on approval, not a real human-verified signal.
+            Show the neighborhood + review count and leave it at that. */}
         <div className="flex items-center gap-3 flex-wrap text-[12px] mb-5" style={{ color: 'var(--text-muted)' }}>
-          {verifiedDate && (
-            <>
-              <span className="flex items-center gap-1">
-                <span style={{ color: 'var(--accent)', fontWeight: 600 }}>✓ Verified</span>
-                by Donovan · {verifiedDate}
-              </span>
-              <span>·</span>
-            </>
-          )}
-          <span>{reviews.length} review{reviews.length === 1 ? '' : 's'}</span>
           {spot.address && (
-            <>
-              <span>·</span>
-              <span className="flex items-center gap-1 truncate max-w-[280px]">
-                <MapPin size={11} />
-                {spot.neighborhood ? `${spot.neighborhood}, ` : ''}
-                {spot.city}
-              </span>
-            </>
+            <span className="flex items-center gap-1 truncate max-w-[280px]">
+              <MapPin size={11} />
+              {spot.neighborhood ? `${spot.neighborhood}, ` : ''}
+              {spot.city}
+            </span>
           )}
+          <span>·</span>
+          <span>{reviews.length} review{reviews.length === 1 ? '' : 's'}</span>
         </div>
 
-        {/* ── 4-tile verdict bar (replaces numeric grid as the headline) ── */}
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-          <VerdictTile icon={Wifi}   label="Wi-Fi"   verdict={wifiVerdict(spot)}   score={spot.wifi_score} />
-          <VerdictTile icon={Zap}    label="Outlets" verdict={outletVerdict(spot)} score={spot.outlet_score} />
-          <VerdictTile icon={Volume2} label="Quiet"   verdict={quietVerdict(spot)}  score={spot.noise_score} />
-          <VerdictTile icon={Moon}   label="Late"    verdict={lateVerdict(spot)}   score={spot.late_night_score} />
-        </section>
+        {/* ── Workability hero ──
+            Replaces the old colored verdict tiles ("Spotty", "Few",
+            "Closes early") which fabricated red badges on every spot
+            with default data. Now we lead with the actual editorial
+            signal when present, and show an honest "Not yet rated"
+            state when absent. */}
+        <WorkabilityHero spot={spot} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* ── Left column ── */}
@@ -346,35 +324,47 @@ export default async function SpotDetailPage({ params }: PageProps) {
               </div>
             </section>
 
-            {/* Score breakdown — collapsed-feeling, secondary */}
-            <section>
-              <h2 className="text-[11px] font-semibold mb-3 uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-                Score breakdown
-              </h2>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                {[
-                  { label: 'Work', score: spot.work_score },
-                  { label: 'Late', score: spot.late_night_score },
-                  { label: 'Wi-Fi', score: spot.wifi_score },
-                  { label: 'Outlets', score: spot.outlet_score },
-                  { label: 'Noise', score: spot.noise_score },
-                  { label: 'Seating', score: spot.seating_score },
-                ].map(({ label, score }) => (
-                  <div
-                    key={label}
-                    className="p-2 rounded-lg border text-center"
-                    style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border-subtle)' }}
-                  >
-                    <div className="text-[16px] font-bold" style={{ color: 'var(--text-primary)' }}>
-                      {formatScore(score)}
+            {/* Score breakdown — hide entirely when all-zero (no reviews yet).
+                Rendering six 0.0s reads as "this place scores zero on
+                everything," which is the opposite of "we don't have data
+                yet." */}
+            {[
+              spot.work_score,
+              spot.late_night_score,
+              spot.wifi_score,
+              spot.outlet_score,
+              spot.noise_score,
+              spot.seating_score,
+            ].some((s) => s > 0) && (
+              <section>
+                <h2 className="text-[11px] font-semibold mb-3 uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                  Review-derived scores
+                </h2>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {[
+                    { label: 'Work', score: spot.work_score },
+                    { label: 'Late', score: spot.late_night_score },
+                    { label: 'Wi-Fi', score: spot.wifi_score },
+                    { label: 'Outlets', score: spot.outlet_score },
+                    { label: 'Noise', score: spot.noise_score },
+                    { label: 'Seating', score: spot.seating_score },
+                  ].map(({ label, score }) => (
+                    <div
+                      key={label}
+                      className="p-2 rounded-lg border text-center"
+                      style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border-subtle)' }}
+                    >
+                      <div className="text-[16px] font-bold" style={{ color: 'var(--text-primary)' }}>
+                        {formatScore(score)}
+                      </div>
+                      <div className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                        {label}
+                      </div>
                     </div>
-                    <div className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-                      {label}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* Reviews — most recent first */}
             <section>
