@@ -13,12 +13,36 @@
 
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseBrowserClient } from '@/lib/supabase-browser'
 
+// Next.js 16 requires useSearchParams() to be inside a Suspense boundary so
+// the surrounding page can still be statically rendered. Split the form into
+// a child component and wrap it.
+
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginShell />}>
+      <LoginInner />
+    </Suspense>
+  )
+}
+
+function LoginShell() {
+  return (
+    <div className="min-h-screen" style={{ backgroundColor: 'var(--background)' }}>
+      <div className="max-w-md mx-auto px-4 sm:px-6 py-16">
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          Loading…
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function LoginInner() {
   const searchParams = useSearchParams()
   const nextPath = searchParams.get('next') ?? '/'
   const [email, setEmail] = useState('')
