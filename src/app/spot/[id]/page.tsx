@@ -11,6 +11,8 @@ import {
   typeLabel, is24Hours, formatTime,
 } from '@/lib/utils'
 import { ReviewForm } from '@/components/ReviewForm'
+import { SpotActions } from '@/components/SpotActions'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { Spot, SpotHours } from '@/types'
 
 interface PageProps {
@@ -153,6 +155,28 @@ export default async function SpotDetailPage({ params }: PageProps) {
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   )
 
+  // Read the current user's relations to this spot so the action buttons
+  // render with the correct initial state.
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  let relationState = { favorite: false, tried: false, want_to_go: false }
+  if (user) {
+    const { data: rels } = await supabase
+      .from('user_spot_relations')
+      .select('relation_type')
+      .eq('user_id', user.id)
+      .eq('spot_id', spot.id)
+    if (rels) {
+      for (const r of rels) {
+        if (r.relation_type === 'favorite') relationState.favorite = true
+        else if (r.relation_type === 'tried') relationState.tried = true
+        else if (r.relation_type === 'want_to_go') relationState.want_to_go = true
+      }
+    }
+  }
+
   const open = isOpenNow(spot.hours)
   const hours24 = is24Hours(spot.hours)
   const heroPhoto = spot.photos?.[0]
@@ -281,6 +305,14 @@ export default async function SpotDetailPage({ params }: PageProps) {
             signal when present, and show an honest "Not yet rated"
             state when absent. */}
         <WorkabilityHero spot={spot} />
+
+        {/* ── Personal actions: favorite, been here, want to go ── */}
+        <SpotActions
+          spotId={spot.id}
+          spotSlug={spot.slug}
+          isSignedIn={!!user}
+          initialState={relationState}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* ── Left column ── */}

@@ -14,13 +14,23 @@
 'use client'
 
 import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseBrowserClient } from '@/lib/supabase-browser'
 
 export default function LoginPage() {
+  const searchParams = useSearchParams()
+  const nextPath = searchParams.get('next') ?? '/'
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
+
+  // Forward ?next= through to /auth/callback so users land back where they
+  // started after the auth round-trip (e.g. /spot/headrest-coffee).
+  function callbackUrl() {
+    const base = `${window.location.origin}/auth/callback`
+    return nextPath && nextPath !== '/' ? `${base}?next=${encodeURIComponent(nextPath)}` : base
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -32,9 +42,7 @@ export default function LoginPage() {
     const supabase = createSupabaseBrowserClient()
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { emailRedirectTo: callbackUrl() },
     })
 
     if (error) {
@@ -43,6 +51,21 @@ export default function LoginPage() {
       return
     }
     setStatus('sent')
+  }
+
+  async function signInWithGoogle() {
+    setStatus('sending')
+    setErrorMsg('')
+    const supabase = createSupabaseBrowserClient()
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: callbackUrl() },
+    })
+    if (error) {
+      setStatus('error')
+      setErrorMsg(error.message)
+    }
+    // On success, supabase redirects the browser to Google — no further UI here.
   }
 
   return (
@@ -104,6 +127,34 @@ export default function LoginPage() {
               remember.
             </p>
 
+            {/* Google sign-in — primary path. One click, no email back-and-forth. */}
+            <button
+              onClick={signInWithGoogle}
+              disabled={status === 'sending'}
+              className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-semibold border transition-opacity hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed mb-4"
+              style={{
+                backgroundColor: 'white',
+                borderColor: 'var(--border-subtle)',
+                color: '#1c1c1e',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.61z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              {status === 'sending' ? 'Redirecting…' : 'Continue with Google'}
+            </button>
+
+            <div className="flex items-center gap-2 mb-4">
+              <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border-subtle)' }} />
+              <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                or
+              </span>
+              <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border-subtle)' }} />
+            </div>
+
             <form onSubmit={submit} className="flex flex-col gap-3">
               <label className="flex flex-col gap-1.5">
                 <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: 'var(--text-muted)' }}>
@@ -112,7 +163,6 @@ export default function LoginPage() {
                 <input
                   type="email"
                   required
-                  autoFocus
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
