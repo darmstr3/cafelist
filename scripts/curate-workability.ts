@@ -185,7 +185,11 @@ async function scoreSpot(spot: Spot): Promise<
     const { data, usage } = await callClaudeJson<CuratorOutput>({
       system: SYSTEM_PROMPT,
       user: userMsg,
-      maxTokens: 200, // tight — we only need {score, reasoning}
+      // Bumped 200 → 500 (2026-05-25). Was truncating Haiku mid-JSON when
+      // reasoning ran long, causing ~29% failure rate that tripped the
+      // >10% guard and made the script exit before draining the backlog.
+      // 500 is still tight but leaves slack for verbose reasoning.
+      maxTokens: 500,
     })
     const score = clampScore(data.score)
     if (score === null) {
@@ -414,10 +418,11 @@ async function main() {
   }
 
   if (failed > 0 && processed > 0 && failed / processed > 0.1) {
-    // High failure rate is worth surfacing as a non-zero exit so a scheduled
-    // task picks it up — but only if a meaningful share of work failed.
-    console.error(`[curator] WARN: ${failed}/${processed} rows failed (>10%).`)
-    process.exit(2)
+    // High failure rate is worth surfacing in logs, but we no longer bail
+    // with exit(2) — that was preventing the backlog from draining. Failed
+    // rows stay null and get picked up by the next run; the cause should
+    // be investigated separately (see /admin/ops for the failure trend).
+    console.error(`[curator] WARN: ${failed}/${processed} rows failed (>10%). Continuing — failed rows will be retried next run.`)
   }
 }
 
