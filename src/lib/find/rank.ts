@@ -163,7 +163,7 @@ function fitReason(spot: Spot, mode: ModeId, matchedVibes: string[]): string {
     parts.push(`${s}/10 workability`)
   }
 
-  if (mode === 'deep_work' || mode === 'study_session' || mode === 'client_meeting') {
+  if (mode === 'deep_work' || mode === 'client_meeting') {
     if (spot.noise_level === 'quiet' || spot.noise_level === 'silent') {
       parts.push(`${spot.noise_level} atmosphere`)
     }
