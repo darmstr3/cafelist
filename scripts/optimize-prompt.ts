@@ -446,6 +446,11 @@ async function runIntentParser(
     timeOfDay: data.timeOfDay ?? null,
     startTimeIso: data.startTimeIso ?? null,
     durationMinutes: typeof data.durationMinutes === 'number' ? data.durationMinutes : null,
+    // openAfter is supplied by the V2 picker via the open_late
+    // modifier; the free-text parser doesn't extract it. Default
+    // null to satisfy the type without touching the LLM schema.
+    // See src/lib/labs/intent-parser.ts for the production version.
+    openAfter: typeof data.openAfter === 'string' ? data.openAfter : null,
     // V2 picker supplies weekday directly; the free-text parser doesn't
     // extract it. Default null to satisfy the type without touching the
     // LLM prompt schema. See src/lib/labs/intent-parser.ts.
