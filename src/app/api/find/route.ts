@@ -22,9 +22,10 @@ interface Body {
   limit?: number
 }
 
+// `study_session` lives on feat/labs-v2-recommend-route in MODES; not on
+// main yet. Drop it from the allow-list until that branch merges.
 const VALID_MODES = new Set([
   'deep_work',
-  'study_session',
   'creative_reset',
   'coffee_date',
   'client_meeting',
