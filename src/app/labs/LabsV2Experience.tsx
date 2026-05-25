@@ -28,6 +28,8 @@ import {
   ModePicker,
   type ModePickerSubmitPayload,
 } from '@/components/labs/ModePicker'
+import { RecommendationCard } from '@/components/labs/RecommendationCard'
+import type { AgentRun } from '@/lib/labs/types'
 
 // Local weekday. Server-side handling (ticket #7) will read this to
 // resolve hours/open_after constraints. JSON-friendly lowercase
@@ -45,10 +47,10 @@ const WEEKDAYS = [
 
 interface SubmittedRun {
   payload: ModePickerSubmitPayload & { weekday: string }
-  /** Raw response body — could be the eventual AgentRun once #7 ships,
-   *  or an error JSON in the meantime. We render the JSON in a
-   *  read-only block. */
-  response?: unknown
+  /** Successful response from /api/labs/recommend — an AgentRun.
+   *  Set only when the HTTP request succeeded; on error, `error` is set
+   *  and this is left undefined. */
+  response?: AgentRun
   error?: string
 }
 
@@ -75,9 +77,21 @@ export function LabsV2Experience() {
           typeof body === 'object' && body && 'error' in body
             ? String((body as { error: unknown }).error)
             : `HTTP ${res.status}`
-        setRun({ payload, response: body, error: errMsg })
+        setRun({ payload, error: errMsg })
       } else {
-        setRun({ payload, response: body })
+        // The route returns 200 even on fatal errors so the client
+        // can render a partial trace; surface the fatal message as an
+        // error here so we don't show a half-empty result card.
+        const run = body as AgentRun
+        if (run.fatal) {
+          setRun({
+            payload,
+            response: run,
+            error: run.fatalMessage ?? 'The agent hit an error mid-run.',
+          })
+        } else {
+          setRun({ payload, response: run })
+        }
       }
     } catch (e) {
       setRun({
@@ -129,84 +143,48 @@ export function LabsV2Experience() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10 space-y-8">
         <ModePicker onSubmit={handleSubmit} submitting={submitting} />
 
-        {/* ── Post-submit placeholder ──────────────────────────
-            Becomes the real result card stack in ticket #9. For
-            now: show the payload we sent + the server's response so
-            we can verify shape end-to-end during the demo, and so a
-            recruiter watching the Loom can see "the picker really
-            does send a structured payload." */}
+        {/* ── Post-submit result ───────────────────────────────
+            Mirrors V1's render: error block when something went wrong,
+            otherwise the shared RecommendationCard. Trace/evaluation
+            panels are deferred to a follow-up ticket — the recommendation
+            itself is what users came for. */}
         {run && (
-          <section
-            className="rounded-2xl border p-5 fade-in"
-            style={{
-              backgroundColor: 'var(--surface)',
-              borderColor: 'var(--border-subtle)',
-            }}
-          >
-            <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-              <h2
-                className="text-sm font-semibold"
-                style={{ color: 'var(--text-primary)' }}
-              >
-                Submitted — payload preview
-              </h2>
-              <span
-                className="text-[10px] uppercase tracking-wider"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                Result cards land in ticket #9
-              </span>
-            </div>
-
-            <pre
-              className="text-[12px] leading-relaxed overflow-x-auto rounded-lg p-3 mb-3"
-              style={{
-                backgroundColor: 'var(--surface-2)',
-                color: 'var(--text-secondary)',
-                fontFamily:
-                  'ui-monospace, SFMono-Regular, Menlo, Monaco, monospace',
-              }}
-            >
-              {JSON.stringify(run.payload, null, 2)}
-            </pre>
-
+          <div className="space-y-4 fade-in">
             {run.error && (
-              <div
-                className="text-xs rounded-lg p-3 mb-3 border"
+              <section
+                className="rounded-xl border p-4 text-sm"
                 style={{
                   backgroundColor: 'rgba(168, 57, 47, 0.08)',
                   borderColor: 'var(--no)',
                   color: 'var(--no)',
                 }}
               >
-                <strong>Server response:</strong> {run.error}
-                {/* Expected until ticket #7 wires the new payload path
-                    through /api/labs/recommend. Not a regression. */}
-                <div
-                  className="mt-1 text-[11px]"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  Expected until ticket #7 lands the server-side payload
-                  handler.
+                <div className="font-semibold mb-1">
+                  Something went wrong
                 </div>
-              </div>
+                <div>{run.error}</div>
+              </section>
             )}
 
-            {run.response !== undefined && !run.error && (
-              <pre
-                className="text-[12px] leading-relaxed overflow-x-auto rounded-lg p-3"
+            {run.response?.recommendation && !run.error && (
+              <RecommendationCard rec={run.response.recommendation} />
+            )}
+
+            {run.response && !run.response.recommendation && !run.error && (
+              <section
+                className="rounded-xl border p-4 text-sm"
                 style={{
-                  backgroundColor: 'var(--surface-2)',
+                  backgroundColor: 'var(--surface)',
+                  borderColor: 'var(--border-subtle)',
                   color: 'var(--text-secondary)',
-                  fontFamily:
-                    'ui-monospace, SFMono-Regular, Menlo, Monaco, monospace',
-                  maxHeight: '320px',
                 }}
               >
-                {JSON.stringify(run.response, null, 2)}
-              </pre>
+                The agent ran but didn&apos;t find any cafés matching that
+                combination. Try widening the neighborhood or removing a
+                modifier.
+              </section>
             )}
-          </section>
+          </div>
         )}
       </div>
     </>

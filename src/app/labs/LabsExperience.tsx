@@ -20,11 +20,11 @@ import type {
   Evaluation,
   FitScore,
   ParsedIntent,
-  Recommendation,
   RetrievalResult,
   TraceEvent,
   TraceStage,
 } from '@/lib/labs/types'
+import { RecommendationCard } from '@/components/labs/RecommendationCard'
 
 const EXAMPLES = [
   'I need somewhere in Manhattan to work for 3 hours after 6pm, not too loud, outlets preferred, near the F train.',
@@ -243,82 +243,6 @@ function RunResult({ run }: { run: AgentRun }) {
       {run.evaluation && <EvaluationPanel evaluation={run.evaluation} />}
       <LogsPanel run={run} />
     </section>
-  )
-}
-
-function RecommendationCard({ rec }: { rec: Recommendation }) {
-  return (
-    <div
-      className="rounded-xl border p-5 space-y-5"
-      style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}
-    >
-      <p
-        className="text-base leading-relaxed"
-        style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-fraunces)' }}
-      >
-        {rec.summary}
-      </p>
-
-      <ol className="space-y-3">
-        {rec.picks.map((p, i) => (
-          <li
-            key={p.spotId}
-            className="flex gap-3 p-3 rounded-lg"
-            style={{ backgroundColor: 'var(--surface-2)' }}
-          >
-            <span
-              className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold"
-              style={{
-                backgroundColor: 'var(--accent)',
-                color: 'white',
-              }}
-            >
-              {i + 1}
-            </span>
-            <div className="space-y-1 min-w-0">
-              <div className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
-                {p.spotName}
-              </div>
-              <div className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                {p.oneLiner}
-              </div>
-              <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-                Tradeoff: {p.tradeoff}
-              </div>
-            </div>
-          </li>
-        ))}
-      </ol>
-
-      {rec.backup && (
-        <div
-          className="text-sm p-3 rounded-lg border"
-          style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}
-        >
-          <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
-            Backup:
-          </span>{' '}
-          <span className="font-medium">{rec.backup.spotName}</span> — {rec.backup.oneLiner}
-        </div>
-      )}
-
-      <div className="text-[12px] space-y-1" style={{ color: 'var(--text-muted)' }}>
-        <div>
-          <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>
-            Confidence:
-          </span>{' '}
-          {rec.confidenceNote}
-        </div>
-        {rec.caveats.length > 0 && (
-          <div>
-            <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>
-              Caveats:
-            </span>{' '}
-            {rec.caveats.join(' · ')}
-          </div>
-        )}
-      </div>
-    </div>
   )
 }
 

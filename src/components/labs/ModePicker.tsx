@@ -39,6 +39,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { MODES, MODIFIERS, type ModeId, type ModifierId } from '@/lib/labs/modes'
+import { POPULAR_NEIGHBORHOODS } from '@/lib/labs/neighborhoods'
 
 // Icon mapping is a UI concern; it lives here, not in modes.ts,
 // because modes.ts is data-only (no imports from lucide-react).
@@ -280,9 +281,13 @@ export function ModePicker({ onSubmit, submitting = false }: Props) {
             </div>
           )}
 
-          {/* Neighborhood — always optional. Free text for now;
-              "near me" / geolocation hook is ticket #4 scope per
-              LABS_V2_PLAN.md §2.4 and lives in the parent. */}
+          {/* Neighborhood — chip row for fast taps, free-text input
+              behind a <datalist> for autocomplete on the long tail.
+              The chip row keeps the picker tappable on mobile (no
+              soft keyboard for the common case). The text input is
+              still authoritative so users can type anything not in
+              the seed list — including a city name, a neighborhood
+              we haven't pre-populated, or a colloquial nickname. */}
           <div>
             <label
               htmlFor="mp-location"
@@ -292,14 +297,61 @@ export function ModePicker({ onSubmit, submitting = false }: Props) {
               Neighborhood{' '}
               <span style={{ color: 'var(--text-muted)' }}>(optional)</span>
             </label>
+
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {POPULAR_NEIGHBORHOODS.map((n) => {
+                const active = location.trim().toLowerCase() === n.value.toLowerCase()
+                return (
+                  <button
+                    key={n.value}
+                    type="button"
+                    onClick={() =>
+                      // Tap-to-fill, tap-again-to-clear. Lets the
+                      // user undo a chip without reaching for the
+                      // text field.
+                      setLocation((cur) =>
+                        cur.trim().toLowerCase() === n.value.toLowerCase()
+                          ? ''
+                          : n.value
+                      )
+                    }
+                    aria-pressed={active}
+                    className="px-2.5 py-1 rounded-full text-[12px] font-medium border whitespace-nowrap transition-all"
+                    style={
+                      active
+                        ? {
+                            backgroundColor: 'var(--accent)',
+                            color: 'white',
+                            borderColor: 'var(--accent)',
+                          }
+                        : {
+                            backgroundColor: 'var(--surface-2)',
+                            color: 'var(--text-secondary)',
+                            borderColor: 'var(--border)',
+                          }
+                    }
+                  >
+                    {n.label}
+                  </button>
+                )
+              })}
+            </div>
+
             <input
               id="mp-location"
               type="text"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              placeholder='e.g. East Village, or "near me"'
+              placeholder="Or type any neighborhood…"
+              list="mp-location-suggestions"
+              autoComplete="off"
               className="w-full px-3 py-2.5 text-sm"
             />
+            <datalist id="mp-location-suggestions">
+              {POPULAR_NEIGHBORHOODS.map((n) => (
+                <option key={n.value} value={n.value} />
+              ))}
+            </datalist>
           </div>
 
           {/* Freeform — promoted to primary input + required when
