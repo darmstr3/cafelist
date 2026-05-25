@@ -122,6 +122,17 @@ export function ModePicker({ onSubmit, submitting = false }: Props) {
   const criteriaCount =
     selectedModifiers.size + (location.trim() ? 1 : 0) + (modeFreeform.trim() ? 1 : 0)
 
+  // True when the current `location` value exactly matches one of the
+  // popular-neighborhood chips. We hide the redundant text input in
+  // that case — the chip already conveys the value and showing both
+  // produced the "West Village / West Village" stack visible in the
+  // May 25 picker review.
+  const locationChipActive =
+    location.trim().length > 0 &&
+    POPULAR_NEIGHBORHOODS.some(
+      (n) => n.value.toLowerCase() === location.trim().toLowerCase()
+    )
+
   const toggleModifier = (id: ModifierId) => {
     setSelectedModifiers((prev) => {
       const next = new Set(prev)
@@ -417,27 +428,36 @@ export function ModePicker({ onSubmit, submitting = false }: Props) {
               })}
             </div>
 
-            <input
-              id="mp-location"
-              type="text"
-              value={location}
-              onChange={(e) => {
-                const v = e.target.value
-                setLocation(v)
-                // If the new value matches a known chip, infer city
-                // from the chip; otherwise drop the inferred city
-                // (we no longer know which city this neighborhood
-                // belongs to).
-                const matched = POPULAR_NEIGHBORHOODS.find(
-                  (n) => n.value.toLowerCase() === v.trim().toLowerCase()
-                )
-                setLocationCity(matched?.city ?? null)
-              }}
-              placeholder="Or type any neighborhood…"
-              list="mp-location-suggestions"
-              autoComplete="off"
-              className="w-full px-4 py-3 text-sm"
-            />
+            {/* Free-text input only when no chip is selected. Once a
+                chip is active the text input is redundant — the chip
+                already carries the value, and showing both made the
+                "West Village / West Village" duplicate that Donovan
+                flagged in the May 25 review. Users who need a custom
+                neighborhood (not on the chip list) deselect the chips
+                or land here on first render. */}
+            {!locationChipActive && (
+              <input
+                id="mp-location"
+                type="text"
+                value={location}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setLocation(v)
+                  // If the new value matches a known chip, infer city
+                  // from the chip; otherwise drop the inferred city
+                  // (we no longer know which city this neighborhood
+                  // belongs to).
+                  const matched = POPULAR_NEIGHBORHOODS.find(
+                    (n) => n.value.toLowerCase() === v.trim().toLowerCase()
+                  )
+                  setLocationCity(matched?.city ?? null)
+                }}
+                placeholder="Or type any neighborhood…"
+                list="mp-location-suggestions"
+                autoComplete="off"
+                className="w-full px-4 py-3 text-sm"
+              />
+            )}
             <datalist id="mp-location-suggestions">
               {POPULAR_NEIGHBORHOODS.map((n) => (
                 <option key={n.value} value={n.value} />

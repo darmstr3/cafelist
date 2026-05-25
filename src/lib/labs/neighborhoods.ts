@@ -30,19 +30,23 @@ export interface NeighborhoodChip {
   city: string
 }
 
+// NYC-only at launch. Secondary cities (SF, LA, CHI, Austin) are
+// staged out until we have meaningful coverage there — a chip that
+// returns "no matches" the first time someone taps it is worse than
+// no chip at all. Add them back per-city when the directory has at
+// least ~20 viable coffee_shop rows in the launch neighborhood.
+//
+// Order roughly follows expected demand: dense Manhattan downtown
+// first (where most coverage lives today), then prime Brooklyn,
+// then Manhattan midtown / FiDi as office-day fallback.
 export const POPULAR_NEIGHBORHOODS: NeighborhoodChip[] = [
-  // NYC — launch city, top of the list.
-  { value: 'East Village', label: 'East Village', city: 'New York City' },
   { value: 'West Village', label: 'West Village', city: 'New York City' },
+  { value: 'East Village', label: 'East Village', city: 'New York City' },
   { value: 'Greenwich Village', label: 'Greenwich Village', city: 'New York City' },
+  { value: 'SoHo', label: 'SoHo', city: 'New York City' },
+  { value: 'Chelsea', label: 'Chelsea', city: 'New York City' },
   { value: 'Williamsburg', label: 'Williamsburg', city: 'New York City' },
   { value: 'Bushwick', label: 'Bushwick', city: 'New York City' },
   { value: 'Midtown', label: 'Midtown', city: 'New York City' },
   { value: 'Financial District', label: 'FiDi', city: 'New York City' },
-  { value: 'SoHo', label: 'SoHo', city: 'New York City' },
-  // Secondary cities.
-  { value: 'SoMa', label: 'SoMa (SF)', city: 'San Francisco' },
-  { value: 'Silver Lake', label: 'Silver Lake (LA)', city: 'Los Angeles' },
-  { value: 'Wicker Park', label: 'Wicker Park (CHI)', city: 'Chicago' },
-  { value: 'East Austin', label: 'East Austin', city: 'Austin' },
 ]

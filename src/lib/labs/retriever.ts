@@ -26,6 +26,52 @@ function isSupabaseConfigured(): boolean {
 
 const MAX_CANDIDATES = 20
 
+// Minimum healthy candidate count before we consider widening the
+// neighborhood scope. Below this and the LLM is stuck recommending
+// the single survivor with no alternatives — and "1 picky-criteria
+// match in your neighborhood" is rarely useful by itself. Set to 3
+// so the recommender has room to show one in-neighborhood pick plus
+// two "also consider nearby" options.
+const MIN_HEALTHY_CANDIDATES = 3
+
+// NYC neighborhood adjacency clusters. When a query's strict
+// neighborhood filter leaves us thin, we widen ONCE to the rest of
+// the cluster (not the whole city) so adjacent walkable
+// alternatives can surface. Each cluster is hand-curated for actual
+// walkability — not just admin geography. The lookup is case-
+// insensitive against spot.neighborhood.
+//
+// Adding a cluster: keep them small (≤ ~6 neighborhoods) so widening
+// remains "honestly nearby," not "anywhere downtown." Names must
+// match the strings used in spots.neighborhood — these are not
+// canonicalized elsewhere.
+const NYC_ADJACENCY: Record<string, string[]> = {
+  // Downtown Manhattan — walkable in 15–20 min between any two.
+  'west village':       ['Greenwich Village', 'East Village', 'SoHo', 'Chelsea', 'NoHo'],
+  'east village':       ['West Village', 'Greenwich Village', 'NoHo', 'Lower East Side'],
+  'greenwich village':  ['West Village', 'East Village', 'SoHo', 'NoHo'],
+  'soho':               ['West Village', 'Greenwich Village', 'NoHo', 'NoLita', 'Tribeca'],
+  'noho':               ['SoHo', 'East Village', 'Greenwich Village', 'NoLita'],
+  'nolita':             ['SoHo', 'NoHo', 'Lower East Side'],
+  'tribeca':            ['SoHo', 'Financial District'],
+  'chelsea':            ['West Village', 'Flatiron', 'Hell\'s Kitchen'],
+  'lower east side':    ['East Village', 'NoLita', 'Chinatown'],
+  // North Brooklyn.
+  'williamsburg':       ['Greenpoint', 'Bushwick', 'East Williamsburg'],
+  'bushwick':           ['Williamsburg', 'East Williamsburg', 'Bedford-Stuyvesant'],
+  'greenpoint':         ['Williamsburg'],
+  // Midtown.
+  'midtown':            ['Hell\'s Kitchen', 'Chelsea', 'Flatiron', 'Murray Hill'],
+  'hell\'s kitchen':    ['Midtown', 'Chelsea'],
+  'flatiron':           ['Chelsea', 'Midtown', 'Gramercy'],
+  // FiDi / lower Manhattan.
+  'financial district': ['Tribeca', 'Battery Park City'],
+}
+
+function adjacencyClusterFor(neighborhood: string): string[] | null {
+  return NYC_ADJACENCY[neighborhood.toLowerCase()] ?? null
+}
+
 // Curator-driven filtering. The Curator Agent scores every spot 0–10 for
 // "can a remote worker camp here 2+ hrs without pressure to leave". We trust
 // that signal more than the review-derived work_score because review averages
@@ -221,6 +267,79 @@ export async function retrieveCafes(intent: ParsedIntent): Promise<RetrievalResu
       // entirely rather than show an empty page. The trace event tells the
       // user we did this so the answer is honestly framed.
       filtersApplied.push('workability-filter-dropped-zero-candidates-even-relaxed')
+    }
+  }
+
+  // Thin-coverage widening — when the user specified a neighborhood
+  // and we ended up with fewer than MIN_HEALTHY_CANDIDATES after all
+  // hard filters, expand to the neighborhood's walkable adjacency
+  // cluster and re-apply the same gates. We do this ONCE; we do not
+  // recursively widen. Surfaces in filtersApplied so the trace UI can
+  // explain "Best fit in West Village; also considered nearby."
+  //
+  // We deliberately apply this AFTER workability + open_after so
+  // widening only kicks in when the in-neighborhood data is genuinely
+  // thin against the user's intent — not just thin in absolute terms.
+  if (
+    intent.neighborhood &&
+    candidates.length < MIN_HEALTHY_CANDIDATES &&
+    spots.length > candidates.length
+  ) {
+    const cluster = adjacencyClusterFor(intent.neighborhood)
+    if (cluster && cluster.length > 0) {
+      const clusterSet = new Set(cluster.map((n) => n.toLowerCase()))
+      const existingIds = new Set(candidates.map((c) => c.id))
+      const preferredTypeSet =
+        intent.preferredTypes.length > 0 ? new Set(intent.preferredTypes) : null
+      const openAfterThreshold = intent.openAfter ? parseHHMM(intent.openAfter) : null
+
+      const widened = spots.filter((s) => {
+        if (existingIds.has(s.id)) return false
+        const n = (s.neighborhood ?? '').toLowerCase()
+        if (!clusterSet.has(n)) return false
+        // Re-apply the same hard gates the in-neighborhood set passed.
+        if (preferredTypeSet && !preferredTypeSet.has(s.type)) return false
+        // Workability: prefer strict ≥6, but if the in-neighborhood set
+        // had to relax we mirror that relaxation here too. We detect
+        // the relaxation by inspecting the filtersApplied trail rather
+        // than re-running the two-stage logic.
+        const wasRelaxed = filtersApplied.some((f) =>
+          f.startsWith(`workability≥${WORKABILITY_RELAXED_MIN}-loosened`)
+        )
+        if (wasRelaxed) {
+          if (
+            s.workability_score != null &&
+            s.workability_score < WORKABILITY_RELAXED_MIN
+          ) {
+            return false
+          }
+          // null workability allowed under relaxed pass
+        } else {
+          if (
+            s.workability_score == null ||
+            s.workability_score < WORKABILITY_STRICT_MIN
+          ) {
+            return false
+          }
+        }
+        // open_after — exact same check as the in-neighborhood pass.
+        if (openAfterThreshold !== null) {
+          const close = closingTimeToday(s.hours)
+          if (!close) return false
+          const closeMin = parseHHMM(close)
+          if (closeMin === null) return false
+          const effectiveClose = closeMin === 0 ? 24 * 60 : closeMin
+          if (effectiveClose < openAfterThreshold) return false
+        }
+        return true
+      })
+
+      if (widened.length > 0) {
+        candidates = [...candidates, ...widened]
+        filtersApplied.push(
+          `thin-coverage-widened-to-adjacent=${cluster.length}-nhoods-added-${widened.length}`
+        )
+      }
     }
   }
 
