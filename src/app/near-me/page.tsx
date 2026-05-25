@@ -15,7 +15,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { logEvent } from '@/lib/events'
 
 interface NearMeSpot {
   id: string
@@ -52,6 +53,24 @@ export default function NearMePage() {
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [radius, setRadius] = useState(800)
 
+  // If the home-page NearMeBanner already collected coordinates, they're in
+  // the URL hash like #lat=40.7&lng=-73.9. Hash is used (not query string)
+  // so the coordinates never reach the server in any request log.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const hash = window.location.hash.replace(/^#/, '')
+    if (!hash) return
+    const params = new URLSearchParams(hash)
+    const lat = parseFloat(params.get('lat') ?? '')
+    const lng = parseFloat(params.get('lng') ?? '')
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+    setStatus({ kind: 'searching', lat, lng })
+    fetchNearby(lat, lng, radius)
+    // Clear the hash so a refresh doesn't keep re-triggering on stale coords.
+    history.replaceState(null, '', window.location.pathname)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function findNearMe() {
     if (!('geolocation' in navigator)) {
       setStatus({ kind: 'error', message: 'Your browser does not support location.' })
@@ -83,6 +102,10 @@ export default function NearMePage() {
   }
 
   async function fetchNearby(lat: number, lng: number, radiusMeters: number) {
+    logEvent('near_me_search', {
+      path: '/near-me',
+      payload: { radiusMeters },
+    })
     try {
       const res = await fetch('/api/near-me', {
         method: 'POST',
@@ -236,6 +259,16 @@ export default function NearMePage() {
                 <Link
                   key={spot.id}
                   href={`/spot/${spot.slug}`}
+                  onClick={() =>
+                    logEvent('near_me_result_click', {
+                      spot_id: spot.id,
+                      path: '/near-me',
+                      payload: {
+                        distance_meters: spot.distance_meters,
+                        workability_score: spot.workability_score,
+                      },
+                    })
+                  }
                   className="block p-4 rounded-lg border transition-opacity hover:opacity-90"
                   style={{
                     backgroundColor: 'var(--surface)',
