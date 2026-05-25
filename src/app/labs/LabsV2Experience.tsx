@@ -7,27 +7,42 @@
 // /api/labs/recommend. The picker stays presentational; this file
 // is where state lives that crosses the network boundary.
 //
-// Until ticket #9 (result card v2) lands, the post-submit UI is a
-// payload preview + a placeholder note. This satisfies ticket #5's
-// acceptance criterion ("submit triggers /api/labs/recommend with
+// Until ticket #9 (result card v2) lands, the post-submit UI is the
+// shared RecommendationCard plus an error block. This satisfies ticket
+// #5's acceptance criterion ("submit triggers /api/labs/recommend with
 // payload { mode, modifiers, modeFreeform?, location, weekday }")
 // without needing the server-side payload handling that lives in
 // ticket #7.
 //
 // Top-bar pattern intentionally mirrors LabsExperience so the V2
 // surface feels like one product with V1 — same wordmark, same
-// "Labs" badge, same Back link.
+// "Labs" badge, same Back link. The editorial hero (serif headline,
+// copper "Concierge" eyebrow) is the V2 visual differentiator.
 //
 // See LABS_V2_PLAN.md §2, §8 ticket #5.
 // ─────────────────────────────────────────────────────────────
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import {
   ModePicker,
   type ModePickerSubmitPayload,
 } from '@/components/labs/ModePicker'
+import { RecommendationCard } from '@/components/labs/RecommendationCard'
+import type { AgentRun, RetrievalResult } from '@/lib/labs/types'
+
+// Pull the retriever's `source` out of the trace so the UI can warn
+// when we're serving DEMO_SPOTS. The retriever stage's output is a
+// RetrievalResult — typed loosely as `unknown` on TraceEvent so each
+// stage can own its own shape. We narrow defensively here.
+function retrievalSource(run: AgentRun | undefined): 'supabase' | 'demo' | null {
+  if (!run) return null
+  const ev = run.trace.find((e) => e.stage === 'retriever')
+  if (!ev || typeof ev.output !== 'object' || ev.output === null) return null
+  const out = ev.output as Partial<RetrievalResult>
+  return out.source === 'supabase' || out.source === 'demo' ? out.source : null
+}
 
 // Local weekday. Server-side handling (ticket #7) will read this to
 // resolve hours/open_after constraints. JSON-friendly lowercase
@@ -45,16 +60,33 @@ const WEEKDAYS = [
 
 interface SubmittedRun {
   payload: ModePickerSubmitPayload & { weekday: string }
-  /** Raw response body — could be the eventual AgentRun once #7 ships,
-   *  or an error JSON in the meantime. We render the JSON in a
-   *  read-only block. */
-  response?: unknown
+  /** Successful response from /api/labs/recommend — an AgentRun.
+   *  Set only when the HTTP request succeeded; on error, `error` is set
+   *  and this is left undefined. */
+  response?: AgentRun
   error?: string
 }
 
 export function LabsV2Experience() {
   const [submitting, setSubmitting] = useState(false)
   const [run, setRun] = useState<SubmittedRun | null>(null)
+  // Anchor for scroll-into-view after a submit completes. Without
+  // this, the result card renders below the (tall) picker and users
+  // don't realize there's an answer waiting for them.
+  const resultRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!submitting && run && resultRef.current) {
+      // Defer one frame so the layout has stabilized after the new
+      // card renders, then scroll the result into view.
+      requestAnimationFrame(() => {
+        resultRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
+      })
+    }
+  }, [submitting, run])
 
   async function handleSubmit(p: ModePickerSubmitPayload) {
     const weekday = WEEKDAYS[new Date().getDay()]
@@ -75,9 +107,21 @@ export function LabsV2Experience() {
           typeof body === 'object' && body && 'error' in body
             ? String((body as { error: unknown }).error)
             : `HTTP ${res.status}`
-        setRun({ payload, response: body, error: errMsg })
+        setRun({ payload, error: errMsg })
       } else {
-        setRun({ payload, response: body })
+        // The route returns 200 even on fatal errors so the client
+        // can render a partial trace; surface the fatal message as an
+        // error here so we don't show a half-empty result card.
+        const run = body as AgentRun
+        if (run.fatal) {
+          setRun({
+            payload,
+            response: run,
+            error: run.fatalMessage ?? 'The agent hit an error mid-run.',
+          })
+        } else {
+          setRun({ payload, response: run })
+        }
       }
     } catch (e) {
       setRun({
@@ -99,7 +143,7 @@ export function LabsV2Experience() {
           borderColor: 'var(--border-subtle)',
         }}
       >
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
           <Link
             href="/"
             className="inline-flex items-center gap-1 text-xs font-medium transition-opacity hover:opacity-70"
@@ -126,87 +170,128 @@ export function LabsV2Experience() {
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10 space-y-8">
-        <ModePicker onSubmit={handleSubmit} submitting={submitting} />
-
-        {/* ── Post-submit placeholder ──────────────────────────
-            Becomes the real result card stack in ticket #9. For
-            now: show the payload we sent + the server's response so
-            we can verify shape end-to-end during the demo, and so a
-            recruiter watching the Loom can see "the picker really
-            does send a structured payload." */}
-        {run && (
-          <section
-            className="rounded-2xl border p-5 fade-in"
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-10 sm:pt-14 pb-20 space-y-14">
+        {/* ── Hero ─────────────────────────────────────────────
+            Editorial display headline with an italic copper accent
+            on the verb "matches" — the brand promise in one line.
+            Subhead explains the methodology in plain English so a
+            first-time visitor knows what the agent is doing. */}
+        <header className="space-y-5">
+          <div
+            className="text-[11px] uppercase tracking-[0.22em] font-semibold"
+            style={{ color: 'var(--accent)' }}
+          >
+            Concierge
+          </div>
+          <h1
+            className="text-[40px] leading-[1.02] sm:text-5xl md:text-6xl tracking-tight"
             style={{
-              backgroundColor: 'var(--surface)',
-              borderColor: 'var(--border-subtle)',
+              color: 'var(--text-primary)',
+              fontFamily: 'var(--font-fraunces)',
+              fontWeight: 600,
+              letterSpacing: '-0.025em',
             }}
           >
-            <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-              <h2
-                className="text-sm font-semibold"
-                style={{ color: 'var(--text-primary)' }}
-              >
-                Submitted — payload preview
-              </h2>
-              <span
-                className="text-[10px] uppercase tracking-wider"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                Result cards land in ticket #9
-              </span>
-            </div>
-
-            <pre
-              className="text-[12px] leading-relaxed overflow-x-auto rounded-lg p-3 mb-3"
+            Find a café that{' '}
+            <em
               style={{
-                backgroundColor: 'var(--surface-2)',
-                color: 'var(--text-secondary)',
-                fontFamily:
-                  'ui-monospace, SFMono-Regular, Menlo, Monaco, monospace',
+                color: 'var(--accent)',
+                fontStyle: 'italic',
+                fontWeight: 600,
               }}
             >
-              {JSON.stringify(run.payload, null, 2)}
-            </pre>
+              matches
+            </em>{' '}
+            what you&apos;re trying to do.
+          </h1>
+          <p
+            className="text-base sm:text-[17px] leading-relaxed max-w-xl"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            Tell us the intent — we weigh hours, outlets, noise, light, vibe, and
+            seating against thousands of café notes, then explain the tradeoff
+            in plain English.
+          </p>
+        </header>
+
+        <ModePicker onSubmit={handleSubmit} submitting={submitting} />
+
+        {/* ── Post-submit result ───────────────────────────────
+            Mirrors V1's render: error block when something went wrong,
+            otherwise the shared RecommendationCard. Trace/evaluation
+            panels are deferred to a follow-up ticket — the recommendation
+            itself is what users came for.
+
+            We surface the retrieval `source` here so it's obvious when
+            the deploy is serving DEMO_SPOTS instead of the live DB —
+            this was previously silent and produced bizarre recs (a
+            hardcoded "The Late Lobby" in Midtown for a West Village
+            query). The banner is the user-facing signal; the env-var
+            fix is operational. */}
+        {run && (
+          <div ref={resultRef} className="space-y-4 fade-in scroll-mt-20">
+            {retrievalSource(run.response) === 'demo' && !run.error && (
+              <section
+                className="rounded-2xl border p-4 text-sm"
+                style={{
+                  backgroundColor: 'rgba(198, 133, 18, 0.10)',
+                  borderColor: 'var(--kinda)',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <div
+                  className="font-semibold mb-1"
+                  style={{ color: 'var(--kinda)' }}
+                >
+                  Showing demo data — not the live directory
+                </div>
+                <div style={{ color: 'var(--text-secondary)' }}>
+                  This deployment is falling back to a built-in sample set
+                  because Supabase isn&apos;t connected. Recommendations
+                  below are from <code>src/lib/demo-data.ts</code> and
+                  don&apos;t reflect real coverage. Set
+                  <code> NEXT_PUBLIC_SUPABASE_URL</code> +{' '}
+                  <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> for the
+                  Preview environment in Vercel.
+                </div>
+              </section>
+            )}
 
             {run.error && (
-              <div
-                className="text-xs rounded-lg p-3 mb-3 border"
+              <section
+                className="rounded-2xl border p-4 text-sm"
                 style={{
                   backgroundColor: 'rgba(168, 57, 47, 0.08)',
                   borderColor: 'var(--no)',
                   color: 'var(--no)',
                 }}
               >
-                <strong>Server response:</strong> {run.error}
-                {/* Expected until ticket #7 wires the new payload path
-                    through /api/labs/recommend. Not a regression. */}
-                <div
-                  className="mt-1 text-[11px]"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  Expected until ticket #7 lands the server-side payload
-                  handler.
+                <div className="font-semibold mb-1">
+                  Something went wrong
                 </div>
-              </div>
+                <div>{run.error}</div>
+              </section>
             )}
 
-            {run.response !== undefined && !run.error && (
-              <pre
-                className="text-[12px] leading-relaxed overflow-x-auto rounded-lg p-3"
+            {run.response?.recommendation && !run.error && (
+              <RecommendationCard rec={run.response.recommendation} />
+            )}
+
+            {run.response && !run.response.recommendation && !run.error && (
+              <section
+                className="rounded-2xl border p-4 text-sm"
                 style={{
-                  backgroundColor: 'var(--surface-2)',
+                  backgroundColor: 'var(--surface)',
+                  borderColor: 'var(--border-subtle)',
                   color: 'var(--text-secondary)',
-                  fontFamily:
-                    'ui-monospace, SFMono-Regular, Menlo, Monaco, monospace',
-                  maxHeight: '320px',
                 }}
               >
-                {JSON.stringify(run.response, null, 2)}
-              </pre>
+                The agent ran but didn&apos;t find any cafés matching that
+                combination. Try widening the neighborhood or removing a
+                modifier.
+              </section>
             )}
-          </section>
+          </div>
         )}
       </div>
     </>

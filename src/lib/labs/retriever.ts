@@ -12,6 +12,7 @@
 
 import { getSpots } from '@/lib/spots'
 import { DEMO_SPOTS } from '@/lib/demo-data'
+import { closingTimeToday } from '@/lib/utils'
 import type { Spot, SpotFilters } from '@/types'
 import type { ParsedIntent, RetrievalResult } from './types'
 import { isNeighborhoodInBorough, isBorough } from './geo'
@@ -24,6 +25,52 @@ function isSupabaseConfigured(): boolean {
 }
 
 const MAX_CANDIDATES = 20
+
+// Minimum healthy candidate count before we consider widening the
+// neighborhood scope. Below this and the LLM is stuck recommending
+// the single survivor with no alternatives — and "1 picky-criteria
+// match in your neighborhood" is rarely useful by itself. Set to 3
+// so the recommender has room to show one in-neighborhood pick plus
+// two "also consider nearby" options.
+const MIN_HEALTHY_CANDIDATES = 3
+
+// NYC neighborhood adjacency clusters. When a query's strict
+// neighborhood filter leaves us thin, we widen ONCE to the rest of
+// the cluster (not the whole city) so adjacent walkable
+// alternatives can surface. Each cluster is hand-curated for actual
+// walkability — not just admin geography. The lookup is case-
+// insensitive against spot.neighborhood.
+//
+// Adding a cluster: keep them small (≤ ~6 neighborhoods) so widening
+// remains "honestly nearby," not "anywhere downtown." Names must
+// match the strings used in spots.neighborhood — these are not
+// canonicalized elsewhere.
+const NYC_ADJACENCY: Record<string, string[]> = {
+  // Downtown Manhattan — walkable in 15–20 min between any two.
+  'west village':       ['Greenwich Village', 'East Village', 'SoHo', 'Chelsea', 'NoHo'],
+  'east village':       ['West Village', 'Greenwich Village', 'NoHo', 'Lower East Side'],
+  'greenwich village':  ['West Village', 'East Village', 'SoHo', 'NoHo'],
+  'soho':               ['West Village', 'Greenwich Village', 'NoHo', 'NoLita', 'Tribeca'],
+  'noho':               ['SoHo', 'East Village', 'Greenwich Village', 'NoLita'],
+  'nolita':             ['SoHo', 'NoHo', 'Lower East Side'],
+  'tribeca':            ['SoHo', 'Financial District'],
+  'chelsea':            ['West Village', 'Flatiron', 'Hell\'s Kitchen'],
+  'lower east side':    ['East Village', 'NoLita', 'Chinatown'],
+  // North Brooklyn.
+  'williamsburg':       ['Greenpoint', 'Bushwick', 'East Williamsburg'],
+  'bushwick':           ['Williamsburg', 'East Williamsburg', 'Bedford-Stuyvesant'],
+  'greenpoint':         ['Williamsburg'],
+  // Midtown.
+  'midtown':            ['Hell\'s Kitchen', 'Chelsea', 'Flatiron', 'Murray Hill'],
+  'hell\'s kitchen':    ['Midtown', 'Chelsea'],
+  'flatiron':           ['Chelsea', 'Midtown', 'Gramercy'],
+  // FiDi / lower Manhattan.
+  'financial district': ['Tribeca', 'Battery Park City'],
+}
+
+function adjacencyClusterFor(neighborhood: string): string[] | null {
+  return NYC_ADJACENCY[neighborhood.toLowerCase()] ?? null
+}
 
 // Curator-driven filtering. The Curator Agent scores every spot 0–10 for
 // "can a remote worker camp here 2+ hrs without pressure to leave". We trust
@@ -115,18 +162,77 @@ export async function retrieveCafes(intent: ParsedIntent): Promise<RetrievalResu
       filtersApplied.push(
         boroughMode ? `borough=${intent.neighborhood}` : `neighborhood~${intent.neighborhood}`
       )
+    } else {
+      // Neighborhood was specified but matched nothing in the candidate
+      // set. We used to silently keep the unfiltered list here, which
+      // caused the picker to return cafes from completely different
+      // cities (West Village → Austin / Chicago). That's worse than no
+      // result — the user thinks the filter worked when it didn't.
+      //
+      // New behavior: when a city is also known, narrow to spots in
+      // that city as a near-miss fallback. When the city is also
+      // unknown, return an empty candidate list and let the route
+      // surface "no matches" honestly.
+      if (intent.city) {
+        const cityNeedle = intent.city.toLowerCase()
+        const cityHits = candidates.filter((s) =>
+          (s.city ?? '').toLowerCase().includes(cityNeedle)
+        )
+        candidates = cityHits
+        filtersApplied.push(
+          `neighborhood~${intent.neighborhood}-zero→fallback-to-city=${intent.city}`
+        )
+      } else {
+        candidates = []
+        filtersApplied.push(
+          `neighborhood~${intent.neighborhood}-zero-no-city-no-fallback`
+        )
+      }
     }
   }
 
-  // Type preference — if the user explicitly asked for libraries or
-  // hotel lobbies etc., respect that. If their preferred type
-  // matches no cafes, fall back to all types.
+  // Type preference — the V2 picker sets this from each mode's
+  // hardConstraints.preferredTypes (e.g. study_session →
+  // ['coffee_shop']). This is the primary defense against diners,
+  // bars, and hotel lobbies surfacing on laptop-work queries. We
+  // used to fall back to all types on zero hits, but that defeats
+  // the entire point of asking — if no coffee shops match a
+  // Williamsburg study request, the honest answer is "no matches,"
+  // not "here's a bar." HARD filter.
   if (intent.preferredTypes.length > 0) {
     const set = new Set(intent.preferredTypes)
-    const hits = candidates.filter((s) => set.has(s.type))
-    if (hits.length > 0) {
-      candidates = hits
-      filtersApplied.push(`type∈{${intent.preferredTypes.join(',')}}`)
+    const before = candidates.length
+    candidates = candidates.filter((s) => set.has(s.type))
+    filtersApplied.push(
+      `type∈{${intent.preferredTypes.join(',')}}-kept-${candidates.length}-of-${before}`
+    )
+  }
+
+  // open_after hard hours filter — the `open_late` modifier sets
+  // intent.openAfter='21:00'. We require the spot's closing time
+  // today to be at or after the threshold. Spots with no recorded
+  // hours are EXCLUDED on a late-night query because we can't vouch
+  // for them. No fallback: if 0 spots are open that late, return 0
+  // and let the route surface "no matches" — serving a 10pm closer
+  // when the user asked for "open late" is the bug we're fixing.
+  if (intent.openAfter) {
+    const threshold = parseHHMM(intent.openAfter)
+    if (threshold !== null) {
+      const before = candidates.length
+      candidates = candidates.filter((s) => {
+        const close = closingTimeToday(s.hours)
+        if (!close) return false
+        const closeMin = parseHHMM(close)
+        if (closeMin === null) return false
+        // Close at 00:00 means "closes at midnight end-of-day" in
+        // our hours convention — treat as 24:00 when comparing.
+        // Matches the logic in utils.isOpenLate.
+        const effectiveClose = closeMin === 0 ? 24 * 60 : closeMin
+        return effectiveClose >= threshold
+      })
+      filtersApplied.push(
+        `open_after=${intent.openAfter}-kept-${candidates.length}-of-${before}`
+      )
     }
   }
 
@@ -164,6 +270,14 @@ export async function retrieveCafes(intent: ParsedIntent): Promise<RetrievalResu
     }
   }
 
+  // No silent widening. If the user asked for West Village we do not
+  // serve SoHo with a sorry-face. Returning a thin set (or zero) and
+  // letting the UI surface "we don't have coverage there yet" is
+  // honest; widening looked like the agent didn't listen. The
+  // adjacency map below is kept for the route's empty-state path,
+  // which suggests ONE alternative rather than mixing in nearby
+  // results pretending they answer the question.
+
   // Rank by workability_score first (Curator-driven), falling back to
   // work_score when workability is null. The Curator score is a better
   // signal of "would you actually want to be here" than the review average.
@@ -182,4 +296,19 @@ export async function retrieveCafes(intent: ParsedIntent): Promise<RetrievalResu
     source,
     filtersApplied,
   }
+}
+
+// ── Local helpers ────────────────────────────────────────────
+
+/** Parse "HH:MM" → total minutes since midnight. Returns null on
+ *  malformed input. Local to the retriever — the same logic exists
+ *  inside utils.ts but isn't exported there. Keeping a small local
+ *  copy avoids widening that file's public API for one use site. */
+function parseHHMM(s: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s)
+  if (!m) return null
+  const h = Number(m[1])
+  const min = Number(m[2])
+  if (h > 24 || min > 59) return null
+  return h * 60 + min
 }

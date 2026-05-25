@@ -125,7 +125,18 @@ export interface Mode {
 export interface Modifier {
   id: ModifierId
   label: string
-  /** Constraints layered on the chosen mode's. Override-on-overlap. */
+  /** Constraints layered on the chosen mode's. The synthesizer folds
+   *  these with an asymmetric rule:
+   *   - Scalar fields (noiseTolerance, openAfter, timeOfDay, the
+   *     boolean needsX flags) — modifier OVERRIDES mode on overlap.
+   *   - Array fields (vibe, avoid, preferredTypes) — modifier value
+   *     is UNIONed with mode's and de-duplicated (case-sensitive).
+   *
+   *  Rationale: a modifier like "Quiet enough to read" should ADD a
+   *  vibe constraint, not erase the mode's atmospheric defaults. None
+   *  of today's modifiers redefine arrays, so this docstring exists
+   *  to lock the rule in before someone authors one that does.
+   *  See src/lib/labs/intent-synthesizer.ts. */
   hardConstraints?: HardConstraints
   /** Per-component weight bumps. The synthesizer clamps the
    *  resulting weight to 0..3. */
@@ -141,19 +152,32 @@ export interface Modifier {
 // hardConstraints reference only known intent fields).
 
 export const MODES: Record<ModeId, Mode> = {
+  // preferredTypes is the hardest stop-the-bleeding lever: even if a
+  // diner or bar has the right boolean flags (has_wifi, etc.) and a
+  // generous workability_score, this filter excludes it before the
+  // recommender ever sees it. Coffee shops are the only venues a
+  // remote worker should be camping at for hours; coworking spaces
+  // are workable but typically gated, so we keep them out until we
+  // model membership.
+  //
+  // NOTE (May 25): needsOutlets removed from Deep Work + Study session.
+  // Most NYC cafés have *some* outlets but the data is unreliable —
+  // requiring outlets as a HARD filter was killing otherwise-good
+  // West Village picks. Outlets stay in the picker's wishlist via
+  // free-text "Anything else?" until we have better per-spot signal.
   deep_work: {
     id: 'deep_work',
     label: 'Deep Work',
-    blurb: 'Heads-down stretch with outlets, wifi, and quiet to focus.',
+    blurb: 'Heads-down stretch with wifi and quiet to focus.',
     hardConstraints: {
       noiseTolerance: 'quiet',
-      needsOutlets: true,
       needsWifi: true,
       laptopFriendly: true,
+      preferredTypes: ['coffee_shop'],
     },
     weights: { location: 2, time: 2, noise: 3, features: 3, vibe: 1 },
     exampleQuery:
-      'Quiet spot with outlets and wifi where I can post up with my laptop for a few hours.',
+      'Quiet spot with wifi where I can post up with my laptop for a few hours.',
   },
 
   // TODO(data-agent, ticket #6): Tune Study session's hardConstraints
@@ -165,17 +189,17 @@ export const MODES: Record<ModeId, Mode> = {
   study_session: {
     id: 'study_session',
     label: 'Study session',
-    blurb: 'Long stretch with textbooks or notes — quiet, outlets, table space.',
+    blurb: 'Long stretch with textbooks or notes — quiet, table space.',
     hardConstraints: {
       noiseTolerance: 'quiet',
-      needsOutlets: true,
       needsWifi: true,
       laptopFriendly: true,
       vibe: ['cozy', 'calm'],
+      preferredTypes: ['coffee_shop'],
     },
     weights: { location: 2, time: 2, noise: 3, features: 3, vibe: 2 },
     exampleQuery:
-      'Quiet spot to study for a few hours — outlets, room for textbooks and a laptop, not too crowded.',
+      'Quiet spot to study for a few hours — room for textbooks and a laptop, not too crowded.',
   },
 
   creative_reset: {
@@ -185,12 +209,16 @@ export const MODES: Record<ModeId, Mode> = {
     hardConstraints: {
       noiseTolerance: 'moderate',
       vibe: ['cozy', 'creative', 'inspiring'],
+      preferredTypes: ['coffee_shop'],
     },
     weights: { location: 2, time: 1, noise: 2, features: 1, vibe: 3 },
     exampleQuery:
       'Cozy, atmospheric cafe to recharge — pour-over, a notebook, no laptop necessary.',
   },
 
+  // Coffee date stays broader on type — a hotel lobby can be a
+  // perfectly nice social meetup spot even though it's not workable.
+  // The avoid list does most of the work here.
   coffee_date: {
     id: 'coffee_date',
     label: 'Coffee Date / Social',
@@ -199,6 +227,7 @@ export const MODES: Record<ModeId, Mode> = {
       noiseTolerance: 'moderate',
       vibe: ['cozy', 'warm'],
       avoid: ['library', 'silent'],
+      preferredTypes: ['coffee_shop', 'hotel_lobby'],
     },
     weights: { location: 3, time: 2, noise: 2, features: 1, vibe: 3 },
     exampleQuery:
@@ -213,6 +242,7 @@ export const MODES: Record<ModeId, Mode> = {
       noiseTolerance: 'quiet',
       needsWifi: true,
       vibe: ['professional', 'calm'],
+      preferredTypes: ['coffee_shop', 'hotel_lobby'],
     },
     weights: { location: 3, time: 2, noise: 3, features: 3, vibe: 2 },
     exampleQuery:

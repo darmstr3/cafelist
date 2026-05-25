@@ -74,6 +74,16 @@ export async function parseIntent(rawQuery: string): Promise<IntentParserResult>
     startTimeIso: data.startTimeIso ?? null,
     durationMinutes:
       typeof data.durationMinutes === 'number' ? data.durationMinutes : null,
+    // openAfter is set by the V2 picker (open_late modifier) and
+    // consumed by the retriever as a hard hours filter. The free-text
+    // parser doesn't extract it — open-late phrases like "after 9pm"
+    // ride in `timeOfDay` and are scored softly. Default null here so
+    // ParsedIntent stays satisfied without expanding the LLM schema.
+    openAfter: typeof data.openAfter === 'string' ? data.openAfter : null,
+    // The V1 free-text parser doesn't extract weekday; the V2 picker
+    // supplies it directly. Default null so the ParsedIntent type
+    // stays satisfied without changing the LLM prompt schema.
+    weekday: typeof data.weekday === 'string' ? data.weekday : null,
     noiseTolerance: data.noiseTolerance ?? null,
     vibe: Array.isArray(data.vibe) ? data.vibe : [],
     needsOutlets: data.needsOutlets ?? null,

@@ -32,6 +32,20 @@ export interface ParsedIntent {
   timeOfDay: string | null // "after 6pm", "morning", "now"
   startTimeIso: string | null // resolved absolute time if computable
   durationMinutes: number | null
+  /** HH:MM 24-hour. Set by modifiers like `open_late` to express
+   *  "must be open at or after this time today." Consumed by the
+   *  retriever as a HARD filter (spots that close before this are
+   *  excluded, not just down-weighted). The V1 free-text parser
+   *  doesn't extract this — it lives in `timeOfDay` as a phrase
+   *  there and the fit-scorer handles it softly. Null when the
+   *  user did not impose a closing-time floor. */
+  openAfter: string | null
+  /** Day of week the user is planning for, e.g. "saturday". Set by the
+   *  V2 picker (ticket #7) from the picker's weekday widget; not yet
+   *  consumed by retriever/scorer — present so logger captures it for
+   *  coverage-gap analytics and a future ticket can teach the pipeline
+   *  to use it. Null when the user did not specify a day. */
+  weekday: string | null
 
   /** Environment constraints. */
   noiseTolerance: NoiseLevel | null // user's max tolerated noise
@@ -88,6 +102,17 @@ export interface RecommendationPick {
   spotName: string
   oneLiner: string // best use case for this pick
   tradeoff: string // single honest tradeoff
+  /** URL slug for /spot/[slug]. Populated by the route after the
+   *  LLM responds (the model only emits spotId/spotName; the route
+   *  looks up the slug from the retrieved spots and attaches it).
+   *  Optional so older callers and fixtures still type-check. */
+  slug?: string
+  /** Pre-built Google Maps search query. Populated by the route from
+   *  the spot's name + address — the pick row in the result UI uses
+   *  this to open Google Maps directly instead of routing the user
+   *  into our /spot/[slug] page. Users who want a recommendation
+   *  want directions, not another in-app detail screen. */
+  gmapsQuery?: string
 }
 
 export interface Recommendation {
