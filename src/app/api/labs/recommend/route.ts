@@ -18,12 +18,21 @@
 //     → parseIntent(query) inside the intent_parser tracer span.
 //
 //   V2 (mode picker, ticket #7):
-//     { mode, modifiers, location, weekday, query? }
+//     { mode, modifiers, location, weekday, query? | modeFreeform? }
 //     → synthesizeIntent({ mode, modifiers, location, weekday })
 //       inside the intent_parser tracer span. If `mode === 'other'`,
 //       falls back to parseIntent(query). If `mode !== 'other'` and
 //       a non-empty `query` is also supplied, parseIntent runs on
 //       that text and is merged over the synthesized intent.
+//
+//     Field aliases (the ModePicker UI emits one shape, scripts/curl
+//     callers prefer the other; we accept both for the same field):
+//       - `location` may be a string ("Williamsburg"), an object
+//         ({ city?, neighborhood? }), or null. A bare string is
+//         treated as neighborhood.
+//       - `modeFreeform` is an alias for `query`. The picker's
+//         "Anything else?" / "Tell us what you need" textarea binds
+//         to `modeFreeform`; either field is accepted.
 //
 // V2 is gated server-side behind isLabsV2Enabled() — the picker UI
 // is already flag-gated, but this prevents a stray curl from
@@ -142,7 +151,7 @@ async function handleV2(body: Record<string, unknown>): Promise<NextResponse> {
     return NextResponse.json(
       {
         error:
-          'Invalid "location" — expected null or { city?: string, neighborhood?: string }',
+          'Invalid "location" — expected null, a string (treated as neighborhood), or { city?: string, neighborhood?: string }',
       },
       { status: 400 }
     )
@@ -157,10 +166,24 @@ async function handleV2(body: Record<string, unknown>): Promise<NextResponse> {
   }
   const weekday = (body.weekday as string | undefined) ?? null
 
-  const queryText = typeof body.query === 'string' ? body.query.trim() : ''
+  // Accept both `query` (script/curl callers) and `modeFreeform`
+  // (the ModePicker UI field). Treat as aliases — pick whichever is
+  // present, prefer `query` if both somehow arrive. Empty strings on
+  // either field collapse to "no text", which is fine for non-Other
+  // modes and a 400 for Other.
+  const queryRaw =
+    typeof body.query === 'string'
+      ? body.query
+      : typeof body.modeFreeform === 'string'
+        ? body.modeFreeform
+        : ''
+  const queryText = queryRaw.trim()
   if (mode === 'other' && !queryText) {
     return NextResponse.json(
-      { error: 'Mode "other" requires a non-empty "query" string' },
+      {
+        error:
+          'Mode "other" requires a non-empty "query" (or "modeFreeform") string',
+      },
       { status: 400 }
     )
   }
@@ -316,23 +339,45 @@ function finalizeFatal(
 /**
  * Validate the `location` field of a V2 picker payload.
  *
+ * Accepts three shapes:
+ *   - null / undefined  → user didn't supply one
+ *   - string            → bare neighborhood (matches ModePicker's
+ *                         current `location: string` field)
+ *   - { city?, neighborhood? } → structured form (script/curl callers,
+ *                         and any future picker upgrade that splits
+ *                         city from neighborhood)
+ *
  * Returns:
- *   - PickerLocation when valid
- *   - null when absent (user didn't supply one)
+ *   - PickerLocation when valid (or null if all fields are blank)
+ *   - null when the input was null/undefined
  *   - 'invalid' when present but malformed (caller should 400)
+ *
+ * Empty strings inside the object are normalized to null so a blank
+ * picker field doesn't filter the retriever to `city == ''` → zero
+ * candidates.
  */
 function parseLocation(value: unknown): PickerLocation | null | 'invalid' {
   if (value == null) return null
+
+  // Bare string from the picker UI: treat as neighborhood. We don't
+  // try to split "Williamsburg, Brooklyn" into city/neighborhood
+  // here — the retriever already matches loosely on either field,
+  // and the parser would just be guessing.
+  if (typeof value === 'string') {
+    const s = value.trim()
+    if (!s) return null
+    return { city: null, neighborhood: s }
+  }
+
   if (typeof value !== 'object') return 'invalid'
   const obj = value as Record<string, unknown>
   const city = obj.city
   const neighborhood = obj.neighborhood
   if (city != null && typeof city !== 'string') return 'invalid'
   if (neighborhood != null && typeof neighborhood !== 'string') return 'invalid'
-  // Trim and normalize empty strings to null so a blank picker field
-  // doesn't filter the retriever to "city == ''" → zero candidates.
   const cityStr = typeof city === 'string' ? city.trim() : ''
   const nhoodStr = typeof neighborhood === 'string' ? neighborhood.trim() : ''
+  if (!cityStr && !nhoodStr) return null
   return {
     city: cityStr || null,
     neighborhood: nhoodStr || null,
