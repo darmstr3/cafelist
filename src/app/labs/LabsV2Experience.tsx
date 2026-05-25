@@ -7,16 +7,17 @@
 // /api/labs/recommend. The picker stays presentational; this file
 // is where state lives that crosses the network boundary.
 //
-// Until ticket #9 (result card v2) lands, the post-submit UI is a
-// payload preview + a placeholder note. This satisfies ticket #5's
-// acceptance criterion ("submit triggers /api/labs/recommend with
+// Until ticket #9 (result card v2) lands, the post-submit UI is the
+// shared RecommendationCard plus an error block. This satisfies ticket
+// #5's acceptance criterion ("submit triggers /api/labs/recommend with
 // payload { mode, modifiers, modeFreeform?, location, weekday }")
 // without needing the server-side payload handling that lives in
 // ticket #7.
 //
 // Top-bar pattern intentionally mirrors LabsExperience so the V2
 // surface feels like one product with V1 — same wordmark, same
-// "Labs" badge, same Back link.
+// "Labs" badge, same Back link. The editorial hero (serif headline,
+// copper "Concierge" eyebrow) is the V2 visual differentiator.
 //
 // See LABS_V2_PLAN.md §2, §8 ticket #5.
 // ─────────────────────────────────────────────────────────────
@@ -130,7 +131,7 @@ export function LabsV2Experience() {
           borderColor: 'var(--border-subtle)',
         }}
       >
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
           <Link
             href="/"
             className="inline-flex items-center gap-1 text-xs font-medium transition-opacity hover:opacity-70"
@@ -157,7 +158,50 @@ export function LabsV2Experience() {
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10 space-y-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-10 sm:pt-14 pb-20 space-y-14">
+        {/* ── Hero ─────────────────────────────────────────────
+            Editorial display headline with an italic copper accent
+            on the verb "matches" — the brand promise in one line.
+            Subhead explains the methodology in plain English so a
+            first-time visitor knows what the agent is doing. */}
+        <header className="space-y-5">
+          <div
+            className="text-[11px] uppercase tracking-[0.22em] font-semibold"
+            style={{ color: 'var(--accent)' }}
+          >
+            Concierge
+          </div>
+          <h1
+            className="text-[40px] leading-[1.02] sm:text-5xl md:text-6xl tracking-tight"
+            style={{
+              color: 'var(--text-primary)',
+              fontFamily: 'var(--font-fraunces)',
+              fontWeight: 600,
+              letterSpacing: '-0.025em',
+            }}
+          >
+            Find a café that{' '}
+            <em
+              style={{
+                color: 'var(--accent)',
+                fontStyle: 'italic',
+                fontWeight: 600,
+              }}
+            >
+              matches
+            </em>{' '}
+            what you&apos;re trying to do.
+          </h1>
+          <p
+            className="text-base sm:text-[17px] leading-relaxed max-w-xl"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            Tell us the intent — we weigh hours, outlets, noise, light, vibe, and
+            seating against thousands of café notes, then explain the tradeoff
+            in plain English.
+          </p>
+        </header>
+
         <ModePicker onSubmit={handleSubmit} submitting={submitting} />
 
         {/* ── Post-submit result ───────────────────────────────
@@ -169,7 +213,7 @@ export function LabsV2Experience() {
           <div ref={resultRef} className="space-y-4 fade-in scroll-mt-20">
             {run.error && (
               <section
-                className="rounded-xl border p-4 text-sm"
+                className="rounded-2xl border p-4 text-sm"
                 style={{
                   backgroundColor: 'rgba(168, 57, 47, 0.08)',
                   borderColor: 'var(--no)',
@@ -189,7 +233,7 @@ export function LabsV2Experience() {
 
             {run.response && !run.response.recommendation && !run.error && (
               <section
-                className="rounded-xl border p-4 text-sm"
+                className="rounded-2xl border p-4 text-sm"
                 style={{
                   backgroundColor: 'var(--surface)',
                   borderColor: 'var(--border-subtle)',
