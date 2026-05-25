@@ -21,7 +21,7 @@
 // See LABS_V2_PLAN.md §2, §8 ticket #5.
 // ─────────────────────────────────────────────────────────────
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import {
@@ -57,6 +57,23 @@ interface SubmittedRun {
 export function LabsV2Experience() {
   const [submitting, setSubmitting] = useState(false)
   const [run, setRun] = useState<SubmittedRun | null>(null)
+  // Anchor for scroll-into-view after a submit completes. Without
+  // this, the result card renders below the (tall) picker and users
+  // don't realize there's an answer waiting for them.
+  const resultRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!submitting && run && resultRef.current) {
+      // Defer one frame so the layout has stabilized after the new
+      // card renders, then scroll the result into view.
+      requestAnimationFrame(() => {
+        resultRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
+      })
+    }
+  }, [submitting, run])
 
   async function handleSubmit(p: ModePickerSubmitPayload) {
     const weekday = WEEKDAYS[new Date().getDay()]
@@ -149,7 +166,7 @@ export function LabsV2Experience() {
             panels are deferred to a follow-up ticket — the recommendation
             itself is what users came for. */}
         {run && (
-          <div className="space-y-4 fade-in">
+          <div ref={resultRef} className="space-y-4 fade-in scroll-mt-20">
             {run.error && (
               <section
                 className="rounded-xl border p-4 text-sm"

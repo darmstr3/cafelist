@@ -94,6 +94,11 @@ export interface RecommendationPick {
   spotName: string
   oneLiner: string // best use case for this pick
   tradeoff: string // single honest tradeoff
+  /** URL slug for /spot/[slug]. Populated by the route after the
+   *  LLM responds (the model only emits spotId/spotName; the route
+   *  looks up the slug from the retrieved spots and attaches it).
+   *  Optional so older callers and fixtures still type-check. */
+  slug?: string
 }
 
 export interface Recommendation {

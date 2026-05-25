@@ -15,27 +15,34 @@
 // ─────────────────────────────────────────────────────────────
 
 export interface NeighborhoodChip {
-  /** What we send to the API (matches the spots.neighborhood string). */
+  /** What we send to the API as the neighborhood (matches the
+   *  spots.neighborhood string). */
   value: string
   /** What we show on the chip. Usually same as value, but prefixed
    *  with a city tag when ambiguous (e.g. "Capitol Hill" exists in
    *  both Seattle and DC). */
   label: string
+  /** Inferred city for this neighborhood. The picker passes this
+   *  along so the retriever can scope correctly — without it,
+   *  picking "West Village" returned cafes from Austin and Chicago
+   *  when the NYC DB had no exact "West Village" row. See the
+   *  retriever's neighborhood fallback branch. */
+  city: string
 }
 
 export const POPULAR_NEIGHBORHOODS: NeighborhoodChip[] = [
   // NYC — launch city, top of the list.
-  { value: 'East Village', label: 'East Village' },
-  { value: 'West Village', label: 'West Village' },
-  { value: 'Greenwich Village', label: 'Greenwich Village' },
-  { value: 'Williamsburg', label: 'Williamsburg' },
-  { value: 'Bushwick', label: 'Bushwick' },
-  { value: 'Midtown', label: 'Midtown' },
-  { value: 'Financial District', label: 'FiDi' },
-  { value: 'SoHo', label: 'SoHo' },
+  { value: 'East Village', label: 'East Village', city: 'New York City' },
+  { value: 'West Village', label: 'West Village', city: 'New York City' },
+  { value: 'Greenwich Village', label: 'Greenwich Village', city: 'New York City' },
+  { value: 'Williamsburg', label: 'Williamsburg', city: 'New York City' },
+  { value: 'Bushwick', label: 'Bushwick', city: 'New York City' },
+  { value: 'Midtown', label: 'Midtown', city: 'New York City' },
+  { value: 'Financial District', label: 'FiDi', city: 'New York City' },
+  { value: 'SoHo', label: 'SoHo', city: 'New York City' },
   // Secondary cities.
-  { value: 'SoMa', label: 'SoMa (SF)' },
-  { value: 'Silver Lake', label: 'Silver Lake (LA)' },
-  { value: 'Wicker Park', label: 'Wicker Park (CHI)' },
-  { value: 'East Austin', label: 'East Austin' },
+  { value: 'SoMa', label: 'SoMa (SF)', city: 'San Francisco' },
+  { value: 'Silver Lake', label: 'Silver Lake (LA)', city: 'Los Angeles' },
+  { value: 'Wicker Park', label: 'Wicker Park (CHI)', city: 'Chicago' },
+  { value: 'East Austin', label: 'East Austin', city: 'Austin' },
 ]

@@ -69,11 +69,19 @@ const MODE_ORDER: ModeId[] = [
   'other',
 ]
 
+/** Location can be a bare string (user typed freeform — we don't
+ *  know the city) or an object with both city and neighborhood
+ *  (user tapped a chip — city is known from the chip metadata).
+ *  The route accepts both shapes; the object form lets the retriever
+ *  scope to the right city instead of leaking results from other
+ *  cities when the neighborhood matches nothing. */
+export type ModePickerLocation = string | { city: string; neighborhood: string }
+
 export interface ModePickerSubmitPayload {
   mode: ModeId
   modifiers: ModifierId[]
   modeFreeform?: string
-  location?: string
+  location?: ModePickerLocation
 }
 
 interface Props {
@@ -88,6 +96,11 @@ export function ModePicker({ onSubmit, submitting = false }: Props) {
   )
   const [modeFreeform, setModeFreeform] = useState('')
   const [location, setLocation] = useState('')
+  // When the user taps a popular-neighborhood chip we capture its
+  // inferred city so submit can send { city, neighborhood } and the
+  // retriever scopes correctly. Cleared when the user edits the text
+  // input directly (we no longer know the city for a freeform value).
+  const [locationCity, setLocationCity] = useState<string | null>(null)
 
   const isOther = selectedMode === 'other'
   // Other requires freeform to be non-empty (the freeform IS the
@@ -113,11 +126,22 @@ export function ModePicker({ onSubmit, submitting = false }: Props) {
 
   const handleSubmit = () => {
     if (submitDisabled || !selectedMode) return
+    const trimmedLoc = location.trim()
+    // Send the object form when we know both city + neighborhood
+    // (chip-driven). Fall back to the bare string when freeform or
+    // when chip selection has been edited out of sync.
+    const locPayload: ModePickerLocation | undefined = trimmedLoc
+      ? locationCity && trimmedLoc.toLowerCase() === locationCity.toLowerCase()
+        ? undefined // (shouldn't happen — city != neighborhood)
+        : locationCity
+          ? { city: locationCity, neighborhood: trimmedLoc }
+          : trimmedLoc
+      : undefined
     onSubmit({
       mode: selectedMode,
       modifiers: Array.from(selectedModifiers),
       modeFreeform: modeFreeform.trim() || undefined,
-      location: location.trim() || undefined,
+      location: locPayload,
     })
   }
 
@@ -305,16 +329,20 @@ export function ModePicker({ onSubmit, submitting = false }: Props) {
                   <button
                     key={n.value}
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
                       // Tap-to-fill, tap-again-to-clear. Lets the
                       // user undo a chip without reaching for the
                       // text field.
-                      setLocation((cur) =>
-                        cur.trim().toLowerCase() === n.value.toLowerCase()
-                          ? ''
-                          : n.value
-                      )
-                    }
+                      const wasActive =
+                        location.trim().toLowerCase() === n.value.toLowerCase()
+                      if (wasActive) {
+                        setLocation('')
+                        setLocationCity(null)
+                      } else {
+                        setLocation(n.value)
+                        setLocationCity(n.city)
+                      }
+                    }}
                     aria-pressed={active}
                     className="px-2.5 py-1 rounded-full text-[12px] font-medium border whitespace-nowrap transition-all"
                     style={
@@ -341,7 +369,18 @@ export function ModePicker({ onSubmit, submitting = false }: Props) {
               id="mp-location"
               type="text"
               value={location}
-              onChange={(e) => setLocation(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value
+                setLocation(v)
+                // If the new value matches a known chip, infer city
+                // from the chip; otherwise drop the inferred city
+                // (we no longer know which city this neighborhood
+                // belongs to).
+                const matched = POPULAR_NEIGHBORHOODS.find(
+                  (n) => n.value.toLowerCase() === v.trim().toLowerCase()
+                )
+                setLocationCity(matched?.city ?? null)
+              }}
               placeholder="Or type any neighborhood…"
               list="mp-location-suggestions"
               autoComplete="off"

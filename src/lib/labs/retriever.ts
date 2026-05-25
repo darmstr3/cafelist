@@ -115,6 +115,32 @@ export async function retrieveCafes(intent: ParsedIntent): Promise<RetrievalResu
       filtersApplied.push(
         boroughMode ? `borough=${intent.neighborhood}` : `neighborhood~${intent.neighborhood}`
       )
+    } else {
+      // Neighborhood was specified but matched nothing in the candidate
+      // set. We used to silently keep the unfiltered list here, which
+      // caused the picker to return cafes from completely different
+      // cities (West Village → Austin / Chicago). That's worse than no
+      // result — the user thinks the filter worked when it didn't.
+      //
+      // New behavior: when a city is also known, narrow to spots in
+      // that city as a near-miss fallback. When the city is also
+      // unknown, return an empty candidate list and let the route
+      // surface "no matches" honestly.
+      if (intent.city) {
+        const cityNeedle = intent.city.toLowerCase()
+        const cityHits = candidates.filter((s) =>
+          (s.city ?? '').toLowerCase().includes(cityNeedle)
+        )
+        candidates = cityHits
+        filtersApplied.push(
+          `neighborhood~${intent.neighborhood}-zero→fallback-to-city=${intent.city}`
+        )
+      } else {
+        candidates = []
+        filtersApplied.push(
+          `neighborhood~${intent.neighborhood}-zero-no-city-no-fallback`
+        )
+      }
     }
   }
 

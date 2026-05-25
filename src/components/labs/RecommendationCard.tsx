@@ -14,6 +14,8 @@
 // the two entry points sees a consistent result.
 // ─────────────────────────────────────────────────────────────
 
+import Link from 'next/link'
+import { ExternalLink } from 'lucide-react'
 import type { Recommendation } from '@/lib/labs/types'
 
 export function RecommendationCard({ rec }: { rec: Recommendation }) {
@@ -45,9 +47,23 @@ export function RecommendationCard({ rec }: { rec: Recommendation }) {
             >
               {i + 1}
             </span>
-            <div className="space-y-1 min-w-0">
+            <div className="space-y-1 min-w-0 flex-1">
+              {/* Name links to /spot/[slug] when the route attached
+                  a slug. Falls back to plain text if the pick came
+                  from a path that doesn't backfill slug (e.g. older
+                  fixtures, eval harness). */}
               <div className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
-                {p.spotName}
+                {p.slug ? (
+                  <Link
+                    href={`/spot/${p.slug}`}
+                    className="inline-flex items-center gap-1 transition-opacity hover:opacity-70"
+                  >
+                    {p.spotName}
+                    <ExternalLink size={11} aria-hidden="true" />
+                  </Link>
+                ) : (
+                  p.spotName
+                )}
               </div>
               <div className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                 {p.oneLiner}
@@ -68,7 +84,19 @@ export function RecommendationCard({ rec }: { rec: Recommendation }) {
           <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
             Backup:
           </span>{' '}
-          <span className="font-medium">{rec.backup.spotName}</span> — {rec.backup.oneLiner}
+          {rec.backup.slug ? (
+            <Link
+              href={`/spot/${rec.backup.slug}`}
+              className="font-medium inline-flex items-center gap-1 transition-opacity hover:opacity-70"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {rec.backup.spotName}
+              <ExternalLink size={11} aria-hidden="true" />
+            </Link>
+          ) : (
+            <span className="font-medium">{rec.backup.spotName}</span>
+          )}{' '}
+          — {rec.backup.oneLiner}
         </div>
       )}
 

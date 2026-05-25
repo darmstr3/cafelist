@@ -285,6 +285,21 @@ async function executePipeline({
         spots: retrieval.candidates,
       })
       ctx.setLlmUsage(usage)
+      // Attach the URL slug to each pick so the UI can render
+      // /spot/[slug] links. The LLM doesn't emit slugs (and we don't
+      // want to teach it to — it's a leak of internal IDs); the route
+      // looks them up from the retrieved spots after the fact.
+      const slugById = new Map(retrieval.candidates.map((s) => [s.id, s.slug]))
+      recommendation.picks = recommendation.picks.map((p) => ({
+        ...p,
+        slug: slugById.get(p.spotId) ?? undefined,
+      }))
+      if (recommendation.backup) {
+        recommendation.backup = {
+          ...recommendation.backup,
+          slug: slugById.get(recommendation.backup.spotId) ?? undefined,
+        }
+      }
       return recommendation
     })
 
