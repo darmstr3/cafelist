@@ -43,13 +43,20 @@ export default async function HomePage() {
               middleware while still in-progress. Access it via /labs directly
               with admin credentials. */}
           <div className="ml-auto flex items-center gap-3">
+            <Link
+              href="/find"
+              className="text-[11px] font-medium transition-opacity hover:opacity-80"
+              style={{ color: 'var(--accent)' }}
+            >
+              Find a spot
+            </Link>
             <UserMenu initialUser={user} />
             <Link
               href="/submit"
               className="text-[11px] font-medium transition-opacity hover:opacity-80"
               style={{ color: 'var(--text-muted)' }}
             >
-              Submit a spot
+              Submit
             </Link>
           </div>
         </div>
