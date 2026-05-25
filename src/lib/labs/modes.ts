@@ -152,6 +152,13 @@ export interface Modifier {
 // hardConstraints reference only known intent fields).
 
 export const MODES: Record<ModeId, Mode> = {
+  // preferredTypes is the hardest stop-the-bleeding lever: even if a
+  // diner or bar has the right boolean flags (has_wifi, etc.) and a
+  // generous workability_score, this filter excludes it before the
+  // recommender ever sees it. Coffee shops are the only venues a
+  // remote worker should be camping at for hours; coworking spaces
+  // are workable but typically gated, so we keep them out until we
+  // model membership.
   deep_work: {
     id: 'deep_work',
     label: 'Deep Work',
@@ -161,6 +168,7 @@ export const MODES: Record<ModeId, Mode> = {
       needsOutlets: true,
       needsWifi: true,
       laptopFriendly: true,
+      preferredTypes: ['coffee_shop'],
     },
     weights: { location: 2, time: 2, noise: 3, features: 3, vibe: 1 },
     exampleQuery:
@@ -183,6 +191,7 @@ export const MODES: Record<ModeId, Mode> = {
       needsWifi: true,
       laptopFriendly: true,
       vibe: ['cozy', 'calm'],
+      preferredTypes: ['coffee_shop'],
     },
     weights: { location: 2, time: 2, noise: 3, features: 3, vibe: 2 },
     exampleQuery:
@@ -196,12 +205,16 @@ export const MODES: Record<ModeId, Mode> = {
     hardConstraints: {
       noiseTolerance: 'moderate',
       vibe: ['cozy', 'creative', 'inspiring'],
+      preferredTypes: ['coffee_shop'],
     },
     weights: { location: 2, time: 1, noise: 2, features: 1, vibe: 3 },
     exampleQuery:
       'Cozy, atmospheric cafe to recharge — pour-over, a notebook, no laptop necessary.',
   },
 
+  // Coffee date stays broader on type — a hotel lobby can be a
+  // perfectly nice social meetup spot even though it's not workable.
+  // The avoid list does most of the work here.
   coffee_date: {
     id: 'coffee_date',
     label: 'Coffee Date / Social',
@@ -210,6 +223,7 @@ export const MODES: Record<ModeId, Mode> = {
       noiseTolerance: 'moderate',
       vibe: ['cozy', 'warm'],
       avoid: ['library', 'silent'],
+      preferredTypes: ['coffee_shop', 'hotel_lobby'],
     },
     weights: { location: 3, time: 2, noise: 2, features: 1, vibe: 3 },
     exampleQuery:
@@ -224,6 +238,7 @@ export const MODES: Record<ModeId, Mode> = {
       noiseTolerance: 'quiet',
       needsWifi: true,
       vibe: ['professional', 'calm'],
+      preferredTypes: ['coffee_shop', 'hotel_lobby'],
     },
     weights: { location: 3, time: 2, noise: 3, features: 3, vibe: 2 },
     exampleQuery:

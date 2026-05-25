@@ -30,7 +30,19 @@ import {
   type ModePickerSubmitPayload,
 } from '@/components/labs/ModePicker'
 import { RecommendationCard } from '@/components/labs/RecommendationCard'
-import type { AgentRun } from '@/lib/labs/types'
+import type { AgentRun, RetrievalResult } from '@/lib/labs/types'
+
+// Pull the retriever's `source` out of the trace so the UI can warn
+// when we're serving DEMO_SPOTS. The retriever stage's output is a
+// RetrievalResult — typed loosely as `unknown` on TraceEvent so each
+// stage can own its own shape. We narrow defensively here.
+function retrievalSource(run: AgentRun | undefined): 'supabase' | 'demo' | null {
+  if (!run) return null
+  const ev = run.trace.find((e) => e.stage === 'retriever')
+  if (!ev || typeof ev.output !== 'object' || ev.output === null) return null
+  const out = ev.output as Partial<RetrievalResult>
+  return out.source === 'supabase' || out.source === 'demo' ? out.source : null
+}
 
 // Local weekday. Server-side handling (ticket #7) will read this to
 // resolve hours/open_after constraints. JSON-friendly lowercase
@@ -208,9 +220,43 @@ export function LabsV2Experience() {
             Mirrors V1's render: error block when something went wrong,
             otherwise the shared RecommendationCard. Trace/evaluation
             panels are deferred to a follow-up ticket — the recommendation
-            itself is what users came for. */}
+            itself is what users came for.
+
+            We surface the retrieval `source` here so it's obvious when
+            the deploy is serving DEMO_SPOTS instead of the live DB —
+            this was previously silent and produced bizarre recs (a
+            hardcoded "The Late Lobby" in Midtown for a West Village
+            query). The banner is the user-facing signal; the env-var
+            fix is operational. */}
         {run && (
           <div ref={resultRef} className="space-y-4 fade-in scroll-mt-20">
+            {retrievalSource(run.response) === 'demo' && !run.error && (
+              <section
+                className="rounded-2xl border p-4 text-sm"
+                style={{
+                  backgroundColor: 'rgba(198, 133, 18, 0.10)',
+                  borderColor: 'var(--kinda)',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <div
+                  className="font-semibold mb-1"
+                  style={{ color: 'var(--kinda)' }}
+                >
+                  Showing demo data — not the live directory
+                </div>
+                <div style={{ color: 'var(--text-secondary)' }}>
+                  This deployment is falling back to a built-in sample set
+                  because Supabase isn&apos;t connected. Recommendations
+                  below are from <code>src/lib/demo-data.ts</code> and
+                  don&apos;t reflect real coverage. Set
+                  <code> NEXT_PUBLIC_SUPABASE_URL</code> +{' '}
+                  <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> for the
+                  Preview environment in Vercel.
+                </div>
+              </section>
+            )}
+
             {run.error && (
               <section
                 className="rounded-2xl border p-4 text-sm"

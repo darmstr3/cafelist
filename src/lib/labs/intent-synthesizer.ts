@@ -142,6 +142,11 @@ export function synthesizeIntent(args: SynthesizeArgs): ParsedIntent {
     timeOfDay: constraints.timeOfDay ?? null,
     startTimeIso: null,
     durationMinutes: null,
+    // The open_late modifier sets HardConstraints.openAfter = '21:00'.
+    // We propagate it here so the retriever can apply it as a real
+    // hours filter — without this it gets dropped on the floor and
+    // a spot that closes at 8pm can still rank "open late."
+    openAfter: constraints.openAfter ?? null,
     weekday: args.weekday ?? null,
 
     noiseTolerance: constraints.noiseTolerance ?? null,
@@ -187,6 +192,7 @@ export function mergeParsedOverSynth(
     timeOfDay: parsed.timeOfDay ?? synth.timeOfDay,
     startTimeIso: parsed.startTimeIso ?? synth.startTimeIso,
     durationMinutes: parsed.durationMinutes ?? synth.durationMinutes,
+    openAfter: parsed.openAfter ?? synth.openAfter,
     weekday: parsed.weekday ?? synth.weekday,
     noiseTolerance: parsed.noiseTolerance ?? synth.noiseTolerance,
     vibe: dedupe([...synth.vibe, ...parsed.vibe]),

@@ -32,6 +32,14 @@ export interface ParsedIntent {
   timeOfDay: string | null // "after 6pm", "morning", "now"
   startTimeIso: string | null // resolved absolute time if computable
   durationMinutes: number | null
+  /** HH:MM 24-hour. Set by modifiers like `open_late` to express
+   *  "must be open at or after this time today." Consumed by the
+   *  retriever as a HARD filter (spots that close before this are
+   *  excluded, not just down-weighted). The V1 free-text parser
+   *  doesn't extract this — it lives in `timeOfDay` as a phrase
+   *  there and the fit-scorer handles it softly. Null when the
+   *  user did not impose a closing-time floor. */
+  openAfter: string | null
   /** Day of week the user is planning for, e.g. "saturday". Set by the
    *  V2 picker (ticket #7) from the picker's weekday widget; not yet
    *  consumed by retriever/scorer — present so logger captures it for

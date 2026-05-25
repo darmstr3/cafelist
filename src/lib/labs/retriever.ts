@@ -12,6 +12,7 @@
 
 import { getSpots } from '@/lib/spots'
 import { DEMO_SPOTS } from '@/lib/demo-data'
+import { closingTimeToday } from '@/lib/utils'
 import type { Spot, SpotFilters } from '@/types'
 import type { ParsedIntent, RetrievalResult } from './types'
 import { isNeighborhoodInBorough, isBorough } from './geo'
@@ -144,15 +145,48 @@ export async function retrieveCafes(intent: ParsedIntent): Promise<RetrievalResu
     }
   }
 
-  // Type preference — if the user explicitly asked for libraries or
-  // hotel lobbies etc., respect that. If their preferred type
-  // matches no cafes, fall back to all types.
+  // Type preference — the V2 picker sets this from each mode's
+  // hardConstraints.preferredTypes (e.g. study_session →
+  // ['coffee_shop']). This is the primary defense against diners,
+  // bars, and hotel lobbies surfacing on laptop-work queries. We
+  // used to fall back to all types on zero hits, but that defeats
+  // the entire point of asking — if no coffee shops match a
+  // Williamsburg study request, the honest answer is "no matches,"
+  // not "here's a bar." HARD filter.
   if (intent.preferredTypes.length > 0) {
     const set = new Set(intent.preferredTypes)
-    const hits = candidates.filter((s) => set.has(s.type))
-    if (hits.length > 0) {
-      candidates = hits
-      filtersApplied.push(`type∈{${intent.preferredTypes.join(',')}}`)
+    const before = candidates.length
+    candidates = candidates.filter((s) => set.has(s.type))
+    filtersApplied.push(
+      `type∈{${intent.preferredTypes.join(',')}}-kept-${candidates.length}-of-${before}`
+    )
+  }
+
+  // open_after hard hours filter — the `open_late` modifier sets
+  // intent.openAfter='21:00'. We require the spot's closing time
+  // today to be at or after the threshold. Spots with no recorded
+  // hours are EXCLUDED on a late-night query because we can't vouch
+  // for them. No fallback: if 0 spots are open that late, return 0
+  // and let the route surface "no matches" — serving a 10pm closer
+  // when the user asked for "open late" is the bug we're fixing.
+  if (intent.openAfter) {
+    const threshold = parseHHMM(intent.openAfter)
+    if (threshold !== null) {
+      const before = candidates.length
+      candidates = candidates.filter((s) => {
+        const close = closingTimeToday(s.hours)
+        if (!close) return false
+        const closeMin = parseHHMM(close)
+        if (closeMin === null) return false
+        // Close at 00:00 means "closes at midnight end-of-day" in
+        // our hours convention — treat as 24:00 when comparing.
+        // Matches the logic in utils.isOpenLate.
+        const effectiveClose = closeMin === 0 ? 24 * 60 : closeMin
+        return effectiveClose >= threshold
+      })
+      filtersApplied.push(
+        `open_after=${intent.openAfter}-kept-${candidates.length}-of-${before}`
+      )
     }
   }
 
@@ -208,4 +242,19 @@ export async function retrieveCafes(intent: ParsedIntent): Promise<RetrievalResu
     source,
     filtersApplied,
   }
+}
+
+// ── Local helpers ────────────────────────────────────────────
+
+/** Parse "HH:MM" → total minutes since midnight. Returns null on
+ *  malformed input. Local to the retriever — the same logic exists
+ *  inside utils.ts but isn't exported there. Keeping a small local
+ *  copy avoids widening that file's public API for one use site. */
+function parseHHMM(s: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s)
+  if (!m) return null
+  const h = Number(m[1])
+  const min = Number(m[2])
+  if (h > 24 || min > 59) return null
+  return h * 60 + min
 }
