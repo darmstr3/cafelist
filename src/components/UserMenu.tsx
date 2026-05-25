@@ -48,9 +48,13 @@ export function UserMenu({ initialUser }: { initialUser: User | null }) {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[11px] font-medium" style={{ color: 'var(--text-secondary)' }}>
+      <Link
+        href="/me"
+        className="text-[11px] font-medium transition-opacity hover:opacity-80"
+        style={{ color: 'var(--text-secondary)' }}
+      >
         {emailPrefix}
-      </span>
+      </Link>
       <span style={{ color: 'var(--text-muted)' }}>·</span>
       <button
         onClick={signOut}
