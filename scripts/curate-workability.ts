@@ -49,7 +49,11 @@ const costCapArg = args.find((a) => a.startsWith('--cost-cap='))
 const concurrencyArg = args.find((a) => a.startsWith('--concurrency='))
 const LIMIT = limitArg ? parseInt(limitArg.split('=')[1], 10) : Number.POSITIVE_INFINITY
 const COST_CAP_USD = costCapArg ? parseFloat(costCapArg.split('=')[1]) : 2.0
-const CONCURRENCY = concurrencyArg ? Math.max(1, parseInt(concurrencyArg.split('=')[1], 10)) : 4
+// Default 2 (was 4) — concurrency=4 was tripping Anthropic Tier 1 rate
+// limits during full-table re-scores, generating thousands of failed
+// requests and degrading service. 2 is sustainable; raise via flag if
+// the API tier permits.
+const CONCURRENCY = concurrencyArg ? Math.max(1, parseInt(concurrencyArg.split('=')[1], 10)) : 2
 
 // Rows older than this are considered stale and re-scored. 90 days
 // matches the project spec — venues open/close/change hours and the

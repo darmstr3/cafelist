@@ -375,7 +375,7 @@ export default async function SpotDetailPage({ params }: PageProps) {
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                   {[
                     { label: 'Work', score: spot.work_score },
-                    { label: 'Late', score: spot.late_night_score },
+                    { label: 'Open late', score: spot.late_night_score },
                     { label: 'Wi-Fi', score: spot.wifi_score },
                     { label: 'Outlets', score: spot.outlet_score },
                     { label: 'Noise', score: spot.noise_score },

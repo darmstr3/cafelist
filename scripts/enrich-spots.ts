@@ -55,7 +55,9 @@ const concurrencyArg = args.find((a) => a.startsWith('--concurrency='))
 const neighborhoodArg = args.find((a) => a.startsWith('--neighborhood='))
 const LIMIT = limitArg ? parseInt(limitArg.split('=')[1], 10) : Number.POSITIVE_INFINITY
 const COST_CAP_USD = costCapArg ? parseFloat(costCapArg.split('=')[1]) : 10.0
-const CONCURRENCY = concurrencyArg ? Math.max(1, parseInt(concurrencyArg.split('=')[1], 10)) : 4
+// Default 2 (was 4) — see same rationale in curate-workability.ts. Full-table
+// runs at concurrency=4 trip Anthropic Tier 1 rate limits.
+const CONCURRENCY = concurrencyArg ? Math.max(1, parseInt(concurrencyArg.split('=')[1], 10)) : 2
 const NEIGHBORHOOD_FILTER = neighborhoodArg ? neighborhoodArg.split('=')[1] : null
 
 const STALENESS_DAYS = 90
