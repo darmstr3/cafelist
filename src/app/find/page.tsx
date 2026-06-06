@@ -19,6 +19,27 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { MODES, MODIFIERS, type ModeId, type ModifierId } from '@/lib/labs/modes'
 import { logEvent } from '@/lib/events'
+import {
+  isOpenNow,
+  is24Hours,
+  closingTimeToday,
+  formatTime,
+} from '@/lib/utils'
+import type { SpotHours } from '@/types'
+
+/** Plain-English hours label for a result card. Returns null when there's
+ * no hours data so we can omit the line rather than show "unknown". */
+function hoursLabel(hours: SpotHours | null): { text: string; tone: 'open' | 'closed' | 'unknown' } | null {
+  if (!hours) return null
+  if (is24Hours(hours)) return { text: 'Open 24 hours', tone: 'open' }
+  const open = isOpenNow(hours)
+  const closeStr = closingTimeToday(hours)
+  if (!closeStr) {
+    return open ? { text: 'Open today', tone: 'open' } : { text: 'Closed today', tone: 'closed' }
+  }
+  if (open) return { text: `Open until ${formatTime(closeStr)}`, tone: 'open' }
+  return { text: 'Closed', tone: 'closed' }
+}
 
 interface RankedSpot {
   spot: {
@@ -32,6 +53,7 @@ interface RankedSpot {
     workability_score: number | null
     workability_reasoning: string | null
     vibe_tags: string[]
+    hours: SpotHours | null
   }
   fit_score: number
   fit_reason: string
@@ -299,6 +321,24 @@ export default function FindPage() {
                             <> · {Math.max(1, Math.round(r.distance_meters / 80))} min walk</>
                           )}
                         </p>
+                        {(() => {
+                          const hl = hoursLabel(r.spot.hours)
+                          if (!hl) return null
+                          const color =
+                            hl.tone === 'open'
+                              ? 'var(--yes)'
+                              : hl.tone === 'closed'
+                              ? 'var(--no)'
+                              : 'var(--text-muted)'
+                          return (
+                            <p
+                              className="text-[11px] mt-1 font-medium"
+                              style={{ color }}
+                            >
+                              {hl.text}
+                            </p>
+                          )
+                        })()}
                         <p
                           className="text-[11px] mt-1 leading-snug"
                           style={{ color: 'var(--text-secondary)' }}
