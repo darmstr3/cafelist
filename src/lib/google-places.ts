@@ -417,14 +417,31 @@ export function vibeTagsFromPlace(place: GPPlace, reviews: GPReview[]): string[]
   )
   if (is24h) tags.add('24hr')
 
-  const maxClose = Math.max(
-    ...Object.values(hours ?? {}).filter(Boolean).map((h) => {
-      const [hr] = h!.close.split(':').map(Number)
-      return h!.close === '23:59' || h!.close === '00:00' ? 24 : hr
+  // Late-night classification. Hours are 24-hour strings like "23:00" (11pm)
+  // or "02:00" (2am next day). Convert to minutes-from-midnight, then bucket:
+  //   00:00 (midnight) − 02:00 → "open past midnight"
+  //   02:00 − 06:00     → "open till 2am+" (true late-night)
+  //   21:00 − 23:59     → "open late"
+  //   06:00 − 21:00     → no late-night tag
+  //
+  // Previous logic (`maxClose >= 2` on the raw HOUR value) matched any close
+  // time with hour ≥ 2 — so 11:00 (11am close, nonsensical) and 22:00 (10pm)
+  // both qualified, and "open till 2am+" ended up on ~every Bushwick spot.
+  const closeMinutes = Object.values(hours ?? {})
+    .filter(Boolean)
+    .map((h) => {
+      const [hr, mn] = h!.close.split(':').map(Number)
+      return hr * 60 + (mn || 0)
     })
-  )
-  if (maxClose >= 2 && !is24h) tags.add('open till 2am+')
-  else if (maxClose >= 0 && !is24h) tags.add('open past midnight')
+
+  if (!is24h) {
+    const hasTill2am = closeMinutes.some((m) => m >= 2 * 60 && m < 6 * 60)
+    const hasPastMidnight = closeMinutes.some((m) => m > 0 && m < 2 * 60)
+    const hasOpenLate = closeMinutes.some((m) => m >= 21 * 60 && m <= 23 * 60 + 59)
+    if (hasTill2am) tags.add('open till 2am+')
+    else if (hasPastMidnight) tags.add('open past midnight')
+    else if (hasOpenLate) tags.add('open late')
+  }
 
   // Review-based
   if (text.includes('wifi') || text.includes('wi-fi')) tags.add('good wifi')
