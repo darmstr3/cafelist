@@ -95,7 +95,12 @@ function WorkabilityHero({ spot }: { spot: Spot }) {
 // ── Hours table ────────────────────────────────────────────────────
 
 function HoursTable({ hours }: { hours: SpotHours }) {
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
+  // Force NYC timezone — the page renders server-side on Vercel (UTC), so on
+  // Saturday evening EST the server would otherwise call it Sunday and
+  // highlight the wrong row.
+  const today = new Date()
+    .toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' })
+    .toLowerCase()
   return (
     <div className="space-y-1">
       {DAYS.map((day) => {
@@ -317,17 +322,30 @@ export default async function SpotDetailPage({ params }: PageProps) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* ── Left column ── */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Notes — placed near top for narrative */}
-            {spot.notes && (
+            {/* Notes / review excerpt.
+                Friend feedback: the prominently-styled orange-bordered quote
+                used to show the raw first Google review verbatim, which was
+                often off-topic ("mango pastries had mold" on a coffee shop
+                workability page). The Curator's `workability_reasoning` is
+                already the hero quote in <WorkabilityHero> above, so the
+                raw review goes here in a clearly-labeled, less prominent
+                "Recent review" panel — and only when the spot has NO
+                workability_reasoning to surface (otherwise it's noise). */}
+            {spot.notes && spot.workability_reasoning == null && (
               <section
-                className="p-4 rounded-xl border-l-2"
+                className="p-3 rounded-lg border"
                 style={{
                   backgroundColor: 'var(--surface)',
-                  borderColor: 'var(--accent)',
-                  borderLeftWidth: '3px',
+                  borderColor: 'var(--border-subtle)',
                 }}
               >
-                <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                <p
+                  className="text-[10px] font-semibold uppercase tracking-wide mb-1.5"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  From a recent review
+                </p>
+                <p className="text-[13px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                   {spot.notes}
                 </p>
               </section>
