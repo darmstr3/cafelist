@@ -87,10 +87,14 @@ export default function FindPage() {
   const modifiersArr = useMemo(() => Array.from(modifiers), [modifiers])
 
   // Fetch results whenever mode or modifiers change (after first pick).
+  // setStatus is intentionally called inside the effect — both for the
+  // loading transition and the final result. This is the documented pattern
+  // for "trigger an async fetch on dependency change", and the alternative
+  // (deriving status from data) would require duplicating the cancelled-flag
+  // bookkeeping across multiple useMemos. Lint disabled per-effect.
   useEffect(() => {
     if (!mode) return
     let cancelled = false
-    setStatus({ kind: 'loading' })
 
     logEvent('near_me_search', {
       path: '/find',
@@ -98,6 +102,8 @@ export default function FindPage() {
     })
 
     ;(async () => {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setStatus({ kind: 'loading' })
       try {
         const res = await fetch('/api/find', {
           method: 'POST',

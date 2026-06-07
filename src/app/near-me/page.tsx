@@ -64,6 +64,7 @@ export default function NearMePage() {
     const lat = parseFloat(params.get('lat') ?? '')
     const lng = parseFloat(params.get('lng') ?? '')
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus({ kind: 'searching', lat, lng })
     fetchNearby(lat, lng, radius)
     // Clear the hash so a refresh doesn't keep re-triggering on stale coords.
