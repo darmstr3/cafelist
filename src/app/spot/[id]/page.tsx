@@ -166,7 +166,7 @@ export default async function SpotDetailPage({ params }: PageProps) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  let relationState = { favorite: false, tried: false, want_to_go: false }
+  const relationState = { favorite: false, tried: false, want_to_go: false }
   if (user) {
     const { data: rels } = await supabase
       .from('user_spot_relations')
