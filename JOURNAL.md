@@ -4,6 +4,16 @@ Engineering log for the cafelist.app agent stack. Newest entries on top.
 
 ---
 
+## Parking lot — V2.x and later
+
+Ideas surfaced during V2 build that are real but not in current scope. One-line each; promote to a ticket when the time comes.
+
+- **V2.1 — Now-vs-Later time selector** to replace/augment the `Open late` modifier pill. Toggle for "Going now" vs. "Pick a time"; weekday + HH:MM picker for the latter. Payload already accepts `weekday`; retriever already handles `open_after`. Surfaced 2026-05-23 during ticket #5 design review.
+- **V2.x — Weekly schedule view + crowding-aware backups.** Help recurring remote workers plan a week of café visits; surface a backup option per slot if the primary is likely to be too crowded. Requires real-time crowdedness signal, currently out of scope per LABS_V2_PLAN.md §3. Surfaced 2026-05-23.
+- **V2.x — Incentivized ground-truth data collection.** Reward users (free month / coffee discount) for mapping wifi quality, outlet count, table-space accuracy at spots they actually visit. Touches accounts + payments + reviews; currently out of scope per LABS_V2_PLAN.md §3. Surfaced 2026-05-23.
+
+---
+
 ## 2026-05-14 — Curator Agent (workability_score)
 
 **Goal.** Give every approved spot a 0–10 `workability_score` answering one
