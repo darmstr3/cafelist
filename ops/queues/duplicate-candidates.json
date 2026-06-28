@@ -1,0 +1,28 @@
+{
+  "_description": "Duplicate candidate groups. Written by cafelist:find-duplicates. HUMAN APPROVAL REQUIRED before any merge. No automatic merges ever.",
+  "_format": {
+    "group_id": "string — unique group identifier",
+    "confidence": "definite | likely | possible",
+    "match_reason": "string — why these are flagged",
+    "spots": [
+      {
+        "id": "uuid",
+        "name": "string",
+        "address": "string",
+        "city": "string",
+        "neighborhood": "string | null",
+        "lat": "number | null",
+        "lng": "number | null",
+        "google_place_id": "string | null",
+        "status": "pending | approved | rejected",
+        "workability_score": "number | null",
+        "created_at": "ISO timestamp"
+      }
+    ],
+    "flagged_at": "ISO timestamp",
+    "resolved_at": "ISO timestamp | null",
+    "resolution": "merged | not_duplicate | deferred | null",
+    "resolution_notes": "string | null"
+  },
+  "groups": []
+}

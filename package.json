@@ -23,7 +23,15 @@
     "scout": "tsx scripts/scout.ts",
     "scout:dry": "tsx scripts/scout.ts --dry-run",
     "eval": "tsx scripts/eval.ts",
-    "eval:deterministic": "tsx scripts/labs-eval.ts"
+    "eval:deterministic": "tsx scripts/labs-eval.ts",
+    "cafelist:quality-gate": "tsx scripts/cafelist-quality-gate.ts",
+    "cafelist:quality-gate:seo": "tsx scripts/cafelist-quality-gate.ts --seo",
+    "cafelist:quality-gate:summary": "tsx scripts/cafelist-quality-gate.ts --summary",
+    "cafelist:check-stale": "tsx scripts/cafelist-check-stale.ts",
+    "cafelist:check-stale:summary": "tsx scripts/cafelist-check-stale.ts --summary",
+    "cafelist:find-duplicates": "tsx scripts/cafelist-find-duplicates.ts",
+    "cafelist:find-duplicates:summary": "tsx scripts/cafelist-find-duplicates.ts --summary",
+    "cafelist:build-check": "npm run lint && tsc --noEmit && next build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

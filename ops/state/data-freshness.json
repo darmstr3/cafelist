@@ -1,0 +1,18 @@
+{
+  "_description": "Tracks data freshness state for the CafeList spot database. Updated by cafelist:check-stale script.",
+  "_last_run": null,
+  "_thresholds": {
+    "workability_scored_at_days": 90,
+    "enriched_at_days": 90,
+    "last_verified_at_days": 180
+  },
+  "summary": {
+    "total_approved_spots": null,
+    "needs_enrichment": null,
+    "needs_curation": null,
+    "needs_verification": null,
+    "missing_required_fields": null,
+    "fully_fresh": null
+  },
+  "note": "Run 'npm run cafelist:check-stale' to populate this file."
+}

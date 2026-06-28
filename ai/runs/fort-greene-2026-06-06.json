@@ -1,0 +1,250 @@
+{
+  "run_id": "2026-06-06-fort-greene-late-outlets",
+  "trigger": "Find opportunities for quiet cafes with outlets after 5pm in Fort Greene",
+  "created_at": "2026-06-06T00:00:00Z",
+  "status": "complete",
+  "human_approval": "pending",
+  "overall_recommendation": "DO_NOT_SHIP — run enricher first, then re-evaluate",
+  "agents": {
+
+    "research": {
+      "run_id": "2026-06-06-fort-greene-late-outlets-research",
+      "agent": "research",
+      "status": "complete",
+      "created_at": "2026-06-06T00:00:00Z",
+      "opportunity": {
+        "title": "Fort Greene after-5pm outlet gap — enrich before any SEO or product action",
+        "type": "data_gap",
+        "user_problem": "A remote worker searching for a quiet cafe with outlets after 5pm in Fort Greene finds zero matching results. The gap is primarily a data quality problem: 11 of 13 approved spots have never been enriched, so outlet status defaults to false rather than 'unknown.' One strong late-hours candidate exists (Moka & Co, workability 6.8, open until 9pm weekdays) but its outlet status was not resolved even after enrichment ran.",
+        "data_summary": {
+          "approved_spots_in_fort_greene": 13,
+          "workability_gte_6_approved": 2,
+          "workability_5_to_6_approved": 5,
+          "workability_lt_5_approved": 6,
+          "spots_open_after_5pm_and_workability_gte_6": 1,
+          "spots_with_confirmed_outlets": 1,
+          "spots_with_confirmed_outlets_and_open_after_5pm": 0,
+          "spots_with_enriched_at": 1,
+          "spots_without_enriched_at": 12,
+          "spots_with_laptop_friendly_false": 7,
+          "spots_with_hours_null": 1
+        },
+        "gaps_found": [
+          "11 of 13 approved spots have enriched_at=null — outlet data is the Scout default (false), not a measurement. These spots should not be claimed to have 'no outlets.'",
+          "Le Café Coffee (workability 7.5, highest in neighborhood) has hours=null in the DB despite vibe_tag '24hr' — this is a data anomaly. The 24hr claim cannot be surfaced to users without verifying the structured hours field.",
+          "Only 1 approved spot has confirmed outlets: Coffee Project New York Fort Greene (workability 5.5, closes 17:00). It passes the outlet check but fails the after-5pm check.",
+          "Moka & Co (workability 6.8, enriched, open until 21:00 weekdays / 23:00 Fri-Sat) had enrichment run but enrichment_signals show outlet status unresolved — the notes text did not provide sufficient evidence to confirm or deny outlets.",
+          "7 of 13 approved spots are explicitly laptop_friendly=false — these are not surfaced by the retriever for work queries and are correctly excluded.",
+          "No approved spot passes all three conditions simultaneously: workability ≥ 6 AND has_outlets confirmed AND open after 17:00."
+        ],
+        "why_it_matters": "Fort Greene is a well-trafficked Brooklyn neighborhood with strong remote-worker density. Users searching for after-work or evening work sessions are sending queries that return zero results or fall back to the relaxed workability filter. The root cause is data quality, not absence of viable spots — Moka & Co is a genuine candidate that would likely qualify if outlet status could be confirmed. Fixing this benefits users with accurate results and enables a legitimate SEO page once data quality meets the threshold.",
+        "confidence": "high",
+        "confidence_reasoning": "Direct DB query examining all 25 Fort Greene spots (including pending/rejected). Counts verified. No estimation.",
+        "recommended_action": "Step 1: Run enricher on Fort Greene unenriched spots (11 spots). Step 2: Manually verify Le Café Coffee hours (hours=null is an anomaly for a spot tagged '24hr'). Step 3: Manually verify outlet access at Moka & Co (enrichment returned inconclusive). Step 4: Re-run this research. If Moka & Co confirms outlets, 1 strong candidate exists — still below the 3-spot SEO threshold, but valid for a product improvement (show 'best available' with honest labels). Step 5: Run Curator rescore on any spots that get enriched. Step 6: Only run SEO agent if ≥ 3 spots pass the full quality gate.",
+        "blocking_issues": "SEO page quality gate requires ≥ 3 approved spots with workability ≥ 6 + confirmed outlets + open after 17:00. Current count: 0. This cannot be resolved without manual verification of at least 2 spots."
+      },
+      "raw_data": {
+        "spots_examined": 25,
+        "approved_spots": 13,
+        "top_candidates": [
+          {
+            "name": "Le Café Coffee",
+            "workability_score": 7.5,
+            "workability_reasoning": "Coffee shop with quiet, cozy vibe and laptop-friendly culture; 24hr access is excellent. No outlets is a notable friction point for 2+ hour sessions.",
+            "has_outlets": false,
+            "outlet_status": "unknown — enriched_at is null, default value",
+            "laptop_friendly": true,
+            "noise_level": "quiet",
+            "hours": null,
+            "hours_note": "ANOMALY: hours=null but vibe_tags includes '24hr'. Needs manual verification.",
+            "open_after_5pm": "unknown",
+            "last_verified_at": "2026-05-25"
+          },
+          {
+            "name": "Moka & Co",
+            "workability_score": 6.8,
+            "workability_reasoning": "Coffee shop with good seating, wifi, late hours, and laptop-friendly vibe, but lacks outlets—minor friction for extended work sessions.",
+            "has_outlets": false,
+            "outlet_status": "unknown — enriched but evidence inconclusive",
+            "laptop_friendly": true,
+            "noise_level": "moderate",
+            "hours": {
+              "weekdays": "06:00–21:00",
+              "friday": "06:00–23:00",
+              "saturday": "06:00–23:00"
+            },
+            "open_after_5pm": true,
+            "last_verified_at": null,
+            "enriched_at": "2026-05-25"
+          },
+          {
+            "name": "Coffee Project New York | Fort Greene",
+            "workability_score": 5.5,
+            "workability_reasoning": "Coffee shop with wifi/outlets and laptop-friendly tag, but closes at 5pm daily—too early for realistic 2+ hour work sessions. Busy vibe adds pressure.",
+            "has_outlets": true,
+            "outlet_status": "confirmed (has_outlets=true, vibe_tag 'outlets')",
+            "laptop_friendly": true,
+            "noise_level": "moderate",
+            "hours": { "weekdays": "07:30–17:00", "weekends": "08:00–17:00" },
+            "open_after_5pm": false,
+            "last_verified_at": "2026-05-25"
+          }
+        ]
+      }
+    },
+
+    "data_enrichment": {
+      "run_id": "2026-06-06-fort-greene-late-outlets-enrichment",
+      "agent": "data_enrichment",
+      "status": "plan_only",
+      "created_at": "2026-06-06T00:00:00Z",
+      "triggered_by": "2026-06-06-fort-greene-late-outlets-research",
+      "summary": {
+        "note": "This is a plan, not an executed run. Enricher has not been run yet.",
+        "spots_to_enrich": 11,
+        "spots_already_enriched": 1,
+        "estimated_cost_usd": "~$0.05–$0.15 (11 spots × $0.005–0.015/spot)",
+        "command": "npm run enrich -- --neighborhood='Fort Greene' --dry-run"
+      },
+      "manual_verification_needed": [
+        {
+          "spot_id": "963c5b46-57a5-4361-9ca2-790d30cc680d",
+          "spot_name": "Le Café Coffee",
+          "issue": "hours=null despite vibe_tag '24hr'. Structured hours required before any hours claim can be made.",
+          "suggested_action": "Check Google Maps or call directly. If truly 24hr, add structured hours manually via admin panel."
+        },
+        {
+          "spot_id": "5ae0b701-3b5b-4961-be10-8c262a56ddb1",
+          "spot_name": "Moka & Co",
+          "issue": "Enricher ran but outlet evidence was inconclusive. Notes text did not clearly confirm or deny outlets.",
+          "suggested_action": "Visit or call to verify outlet access. High-value verification — this is the only late-hours viable spot."
+        }
+      ],
+      "next_step": "After enrichment: re-run research agent. If Moka & Co outlet status resolves AND Le Café hours confirm, re-run SEO agent and Product agent."
+    },
+
+    "product": {
+      "run_id": "2026-06-06-fort-greene-late-outlets-product",
+      "agent": "product",
+      "status": "complete",
+      "created_at": "2026-06-06T00:00:00Z",
+      "triggered_by": "2026-06-06-fort-greene-late-outlets-research",
+      "proposal": {
+        "title": "Honest outlet confidence labels on spot cards and retriever results",
+        "user_problem": "When a user filters for or asks about outlets, the product currently surfaces spots where has_outlets=false as 'no outlets' — but for most Scout-imported spots, false is a default value, not a confirmed absence. A user may skip a perfectly good spot because of a misleading data absence. Separately, when outlets ARE confirmed, there's no visual signal distinguishing 'we know this place has outlets' from 'we assume it doesn't.'",
+        "demand_evidence": "11 of 13 Fort Greene approved spots have has_outlets=false with enriched_at=null. The retriever's outlet filter would exclude them even though outlet status is genuinely unknown. Same pattern likely exists across 60-70% of Scout-imported spots citywide.",
+        "user_story": "As a remote worker who needs to charge my laptop, I want the filter and spot cards to distinguish between 'no outlets confirmed' and 'outlet status unknown' so that I don't skip a viable spot because of missing data.",
+        "proposed_change": "Add outlet confidence label to spot cards and retriever results. Three states: 'Outlets confirmed' (has_outlets=true AND enriched_at IS NOT NULL), 'Status unknown' (enriched_at IS NULL), 'No outlets' (has_outlets=false AND enrichment_signals.outlets.value='none' AND confidence ≥ 0.6). Modify the has_outlets filter to exclude 'Status unknown' from hard-no filtering — instead surface them with a 'not confirmed' label.",
+        "acceptance_criteria": [
+          "Spot card shows 'Outlets confirmed' badge when has_outlets=true and enriched_at is not null",
+          "Spot card shows 'Outlet status unknown' label when enriched_at is null (instead of silently implying no outlets)",
+          "Spot card shows 'No outlets confirmed' label only when enrichment explicitly found none with confidence ≥ 0.6",
+          "The /labs retriever does not hard-exclude unenriched spots from outlet-seeking queries — instead labels them as 'outlet status not confirmed'",
+          "Existing /labs flow and homepage unaffected when NEXT_PUBLIC_LABS_V2 is off"
+        ],
+        "edge_cases": [
+          "Spot has has_outlets=true but enriched_at=null — show 'Outlets reported' (from import, not enricher-confirmed)",
+          "enrichment_signals.outlets.value='unknown' — show 'Outlet status unknown' (enricher couldn't determine)",
+          "enrichment_signals.outlets.confidence < 0.6 — do not change has_outlets, label as 'Status unclear'"
+        ],
+        "effort": "M",
+        "effort_reasoning": "Touches SpotCard component, retriever confidence labeling, and the /labs result card. Not a schema change. Feature-flag gated for V2 surface changes.",
+        "priority": "P1",
+        "priority_reasoning": "Outlet data is the most commonly misleading field in the schema. Fixing the labeling immediately improves trust without requiring a DB migration.",
+        "risk": "low",
+        "risk_reasoning": "Additive label change, no DB writes. Existing behavior preserved when flag is off.",
+        "not_in_scope": [
+          "Actual outlet verification (that's the enricher + manual verification)",
+          "Adding outlets to the homepage filter bar (separate proposal, needs enricher coverage first)",
+          "Retroactively backfilling has_outlets (that's the enricher's job)"
+        ]
+      }
+    },
+
+    "seo": {
+      "run_id": "2026-06-06-fort-greene-late-outlets-seo",
+      "agent": "seo",
+      "status": "complete",
+      "created_at": "2026-06-06T00:00:00Z",
+      "triggered_by": "2026-06-06-fort-greene-late-outlets-research",
+      "proposal": {
+        "status": "BLOCKED",
+        "block_reason": "Quality gate fails: 0 approved spots pass the simultaneous workability ≥ 6 + confirmed outlets + open after 17:00 filter. Coffee Project NY has confirmed outlets but closes at 17:00. Moka & Co is open until 21:00–23:00 but outlet status is inconclusive after enrichment. Le Café Coffee has highest workability (7.5) but hours=null and outlets unconfirmed. Minimum required: 3 qualifying spots.",
+        "target_query": "quiet cafes with outlets open after 5pm fort greene brooklyn",
+        "slug": "/quiet-cafes-with-outlets-after-5pm-fort-greene",
+        "indexability": "draft-only",
+        "data_quality_score": 2,
+        "qualifying_spots": 0,
+        "spots": [],
+        "unblock_actions": [
+          "Run enricher on 11 unenriched Fort Greene spots: npm run enrich -- --neighborhood='Fort Greene'",
+          "Manually verify Le Café Coffee hours (hours=null is anomalous for a 24hr tag — if confirmed 24hr, this becomes the strongest candidate)",
+          "Manually verify outlet access at Moka & Co (high value — only late-hours viable spot)",
+          "Re-run Curator on any newly enriched spots: npm run curate:workability -- --neighborhood='Fort Greene'",
+          "Re-run research agent to re-check qualifying count",
+          "If count reaches ≥ 3: re-run SEO agent to generate the full page proposal",
+          "Alternative page target if full outlet confirmation is slow: '/best-cafes-to-work-from-in-fort-greene' (no outlet requirement) — Le Café + Moka & Co + Nako give 3 viable spots, though none have confirmed outlets to feature"
+        ],
+        "alternative_viable_page": {
+          "title": "Best cafes to work from in Fort Greene",
+          "slug": "/best-cafes-to-work-from-in-fort-greene",
+          "status": "ON_HOLD",
+          "qualifying_spots": 2,
+          "note": "Le Café (7.5) and Moka & Co (6.8) qualify on workability, but Le Café has hours=null and neither has confirmed outlets. A 'best for working' page with honest 'outlet status unknown' labels is possible with 2 strong spots, but 3 is the minimum. Nako (5.5, closes 17:00) and Compilation Coffee (5.5, closes 17:00) are borderline. If Le Café hours confirm and enricher resolves one more spot, this page becomes viable."
+        }
+      }
+    },
+
+    "qa": {
+      "run_id": "2026-06-06-fort-greene-late-outlets-qa",
+      "agent": "qa",
+      "status": "complete",
+      "created_at": "2026-06-06T00:00:00Z",
+      "triggered_by": "2026-06-06-fort-greene-late-outlets-seo",
+      "verdict": "PASS",
+      "confidence": "high",
+      "issues": [
+        {
+          "severity": "info",
+          "location": "research output — data_summary",
+          "issue": "spots_without_enriched_at: 12 reported in research, but only 11 approved spots lack enriched_at. The count of 12 appears to include one rejected spot (Winner at Margot) in the unenriched count.",
+          "fix": "Acceptable — the research agent examined all 25 spots including rejected ones for completeness. The approved-only count of 11 is correct for action purposes."
+        },
+        {
+          "severity": "info",
+          "location": "product proposal — retriever change",
+          "issue": "Modifying retriever outlet behavior affects the /labs pipeline, which is gated behind NEXT_PUBLIC_LABS_V2. The confidence label change to SpotCard affects the current production UI if not flag-gated.",
+          "fix": "Engineering agent must gate the SpotCard label change behind a feature flag or scope it to the V2 result card only. Existing SpotCard (homepage/find page) should remain unchanged until flag is validated."
+        }
+      ],
+      "conditions_for_pass": [],
+      "summary": "Research and SEO outputs are accurate and correctly blocked. Product proposal is well-scoped. The SEO block is the correct call — 0 qualifying spots is an honest result. One note for engineering: the SpotCard label change needs explicit flag-gating if it touches the production SpotCard component. The proposal is PASS with that engineering note added."
+    },
+
+    "release": {
+      "run_id": "2026-06-06-fort-greene-late-outlets-release",
+      "agent": "release",
+      "status": "pending_approval",
+      "note": "Nothing has shipped yet. This release entry will be completed after Donovan approves and executes the recommended actions. Placeholder structure below.",
+      "pending_actions": [
+        "Donovan reviews and approves this run output",
+        "Enricher runs on Fort Greene",
+        "Manual verification of Le Café hours and Moka & Co outlets",
+        "Research agent re-runs to reassess",
+        "If ≥ 3 spots qualify: SEO agent re-runs, Engineering plans the page, QA reviews, Donovan approves, page ships",
+        "If product proposal approved: Engineering plans outlet label feature, QA reviews, PR merged, deployed"
+      ],
+      "draft_ship_log_entry": {
+        "date": "TBD",
+        "title": "Fort Greene outlet enrichment — unblocks late-hours SEO page",
+        "type": "data_quality",
+        "what_shipped": "Ran enricher on 11 previously unenriched Fort Greene spots. Manually verified hours for Le Café Coffee and outlet access at Moka & Co.",
+        "why": "11/13 approved Fort Greene spots had outlet status defaulted to false (Scout import behavior). Blocked the 'quiet cafes with outlets after 5pm Fort Greene' SEO page at quality gate: 0 qualifying spots.",
+        "before": "0 Fort Greene spots passed outlet + after-5pm + workability ≥ 6 simultaneously. 11 spots unenriched.",
+        "after": "TBD after enrichment run",
+        "next": "If ≥ 3 spots qualify post-enrichment: create /quiet-cafes-with-outlets-after-5pm-fort-greene. If < 3: create /best-cafes-to-work-from-in-fort-greene with honest confidence labels."
+      }
+    }
+
+  }
+}

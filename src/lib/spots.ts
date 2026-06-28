@@ -2,6 +2,7 @@ import { supabase, supabaseAdmin, isSupabaseConfigured } from './supabase'
 import { Spot, SpotFilters, Review } from '@/types'
 import { isOpenNow, isOpenLate, isOpenAfterMidnight } from './utils'
 import { DEMO_SPOTS, DEMO_CITIES } from './demo-data'
+import { PUBLIC_WORKABILITY_FLOOR } from './quality'
 
 // ── Fetch all approved spots (with filters) ───────────────────
 
@@ -12,9 +13,36 @@ export interface SpotsResult {
   serviceError: boolean
 }
 
-export async function getSpots(filters?: Partial<SpotFilters>): Promise<SpotsResult> {
+export interface GetSpotsOptions {
+  /**
+   * Minimum workability_score required for a spot to be returned.
+   * Defaults to the public floor (PUBLIC_WORKABILITY_FLOOR). Rows below
+   * this are excluded; so are rows with a NULL (unscored) workability_score
+   * unless `includeUnscored` is set.
+   */
+  minWorkability?: number
+  /**
+   * Include rows whose workability_score is NULL (unscored Scout rows in
+   * the window before the daily Curator catches them). Public surfaces keep
+   * this false so unvetted spots never publish. The /find retriever opts in
+   * so it can run its own two-stage strict→relaxed filtering over the wider
+   * candidate pool.
+   */
+  includeUnscored?: boolean
+}
+
+export async function getSpots(
+  filters?: Partial<SpotFilters>,
+  opts?: GetSpotsOptions,
+): Promise<SpotsResult> {
+  const minWorkability = opts?.minWorkability ?? PUBLIC_WORKABILITY_FLOOR
+  const includeUnscored = opts?.includeUnscored ?? false
+
   if (!isSupabaseConfigured()) {
-    return { spots: filterDemoSpots(DEMO_SPOTS, filters), serviceError: false }
+    return {
+      spots: filterDemoSpots(DEMO_SPOTS, filters, { minWorkability, includeUnscored }),
+      serviceError: false,
+    }
   }
 
   let query = supabase
@@ -22,6 +50,19 @@ export async function getSpots(filters?: Partial<SpotFilters>): Promise<SpotsRes
     .select('*')
     .eq('status', 'approved')
     .order('work_score', { ascending: false })
+
+  // ── Public quality gate ──────────────────────────────────────
+  // Only surface spots the Curator judged workable. `.gte` excludes
+  // NULLs in Postgres, which is exactly what we want for the public
+  // default. When a caller opts into unscored rows, broaden to
+  // "score >= floor OR score IS NULL".
+  if (includeUnscored) {
+    query = query.or(
+      `workability_score.gte.${minWorkability},workability_score.is.null`,
+    )
+  } else {
+    query = query.gte('workability_score', minWorkability)
+  }
 
   if (filters?.city && filters.city !== '') {
     query = query.ilike('city', `%${filters.city}%`)
@@ -72,8 +113,21 @@ export async function getSpots(filters?: Partial<SpotFilters>): Promise<SpotsRes
 
 // ── Client-side demo filter (mirrors DB-level filters) ────────
 
-function filterDemoSpots(spots: Spot[], filters?: Partial<SpotFilters>): Spot[] {
-  let results = [...spots].sort((a, b) => b.work_score - a.work_score)
+function filterDemoSpots(
+  spots: Spot[],
+  filters?: Partial<SpotFilters>,
+  opts?: GetSpotsOptions,
+): Spot[] {
+  const minWorkability = opts?.minWorkability ?? PUBLIC_WORKABILITY_FLOOR
+  const includeUnscored = opts?.includeUnscored ?? false
+
+  // Mirror the DB-level public quality gate before any other filtering.
+  let results = [...spots]
+    .filter((s) => {
+      if (s.workability_score == null) return includeUnscored
+      return s.workability_score >= minWorkability
+    })
+    .sort((a, b) => b.work_score - a.work_score)
 
   if (!filters) return results
 

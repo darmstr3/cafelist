@@ -1,0 +1,15 @@
+{
+  "_description": "Content review queue. SEO pages awaiting creation, blocked neighborhoods, content drafts pending approval.",
+  "_format": {
+    "id": "string",
+    "type": "neighborhood_page | category_page | content_update | draft",
+    "target": "string — neighborhood name or page path",
+    "status": "READY | ON_HOLD | BLOCKED",
+    "blocking_reason": "string | null",
+    "unblocking_steps": ["string"],
+    "qualifying_spots": "number",
+    "created_at": "ISO timestamp",
+    "resolved_at": "ISO timestamp | null"
+  },
+  "items": []
+}

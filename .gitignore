@@ -22,3 +22,7 @@ npm-debug.log*
 .vercel
 gh-bootstrap.sh
 setup-github.sh
+
+# Ops — auto-generated reports and logs (queues are committed; reports are not)
+ops/reports/
+ops/logs/*.jsonl

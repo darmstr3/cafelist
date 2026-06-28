@@ -1,7 +1,6 @@
 import Link from 'next/link'
-import Image from 'next/image'
-import { Coffee } from 'lucide-react'
 import { Spot } from '@/types'
+import { SpotCardImage } from './SpotCardImage'
 import {
   cn,
   isOpenNow,
@@ -125,23 +124,7 @@ export function SpotCard({ spot, className }: SpotCardProps) {
           className="relative h-28 sm:h-36 overflow-hidden shrink-0"
           style={{ backgroundColor: 'var(--surface-3)' }}
         >
-          {coverPhoto ? (
-            <Image
-              src={coverPhoto}
-              alt={spot.name}
-              fill
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              className="object-cover"
-              unoptimized
-            />
-          ) : (
-            <div
-              className="absolute inset-0 flex items-center justify-center"
-              style={{ color: 'var(--text-muted)', opacity: 0.4 }}
-            >
-              <Coffee size={36} strokeWidth={1.2} />
-            </div>
-          )}
+          <SpotCardImage src={coverPhoto} alt={spot.name} />
 
           {/* Open/Closed badge */}
           <div className="absolute top-1.5 left-1.5">

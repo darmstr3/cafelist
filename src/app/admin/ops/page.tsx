@@ -148,6 +148,13 @@ function TopBar({ fetchedAt }: { fetchedAt: string }) {
           className="ml-auto flex items-center gap-3 text-[11px]"
           style={{ color: 'var(--text-muted)' }}
         >
+          <Link
+            href="/admin/growth-os"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded border transition-opacity hover:opacity-80"
+            style={{ borderColor: 'var(--border-subtle)', color: 'var(--accent)' }}
+          >
+            Growth OS →
+          </Link>
           <span className="inline-flex items-center gap-1">
             <Clock size={12} />
             {formatRelative(fetchedAt)}

@@ -1,0 +1,198 @@
+{
+  "source_run_id": "2026-06-06-fort-greene-late-outlets",
+  "loop_stage": "enrich",
+  "quality_gate": {
+    "required_spots": 3,
+    "qualifying_spots": 0,
+    "status": "BLOCKED",
+    "block_reason": "0 approved spots pass outlet + after-5pm + workability ≥ 6 simultaneously. Coffee Project has outlets but closes at 17:00. Moka & Co is open late but outlet status inconclusive. Le Café has highest workability but hours=null."
+  },
+  "tasks": [
+    {
+      "id": "fg-enrichment-dry-run",
+      "source_run_id": "2026-06-06-fort-greene-late-outlets",
+      "title": "Run enricher dry-run on Fort Greene",
+      "type": "enrichment",
+      "owner": "script",
+      "status": "ready",
+      "reason": "11 of 13 approved Fort Greene spots have enriched_at=null. The has_outlets field defaults to false on Scout import — not a measurement. Dry-run shows what would change without writing to the DB.",
+      "command": "npm run enrich -- --neighborhood='Fort Greene' --dry-run",
+      "expected_output": "Console output showing per-spot field changes: which spots would gain has_outlets=true, laptop_friendly updates, noise_level overwrites. No DB writes.",
+      "completion_criteria": [
+        "Dry-run completes without error",
+        "Review output for any unexpected field changes (e.g. noise_level overwrites on spots you've verified manually)",
+        "Confirm the Moka & Co outlet signal — does the enricher find evidence or return inconclusive?"
+      ],
+      "next_run_trigger": "After reviewing dry-run output, proceed to fg-enrichment-apply if output looks correct. If Moka & Co remains inconclusive, fg-moka-outlets-verify becomes higher priority.",
+      "risk": "low",
+      "related_spots": [
+        { "id": "5ae0b701-3b5b-4961-be10-8c262a56ddb1", "name": "Moka & Co" },
+        { "id": "963c5b46-57a5-4361-9ca2-790d30cc680d", "name": "Le Café Coffee" },
+        { "id": "fcd519d8-8b36-48e8-99f2-84bcfa80030f", "name": "Nako" },
+        { "id": "b4501a99-b8eb-43db-a941-62131815e867", "name": "Compilation Coffee Roasters @ Ft. Greene" },
+        { "id": "18867c0e-5e84-427e-a290-541e3a6a4eac", "name": "Hungry Ghost Coffee" },
+        { "id": "bc79f7e6-199b-4d85-b11e-a488423f9ba0", "name": "Blank Street" },
+        { "id": "6aec0d71-0154-4dd7-a30f-6c29065ea2ad", "name": "Coffee Project New York | Fort Greene" }
+      ],
+      "blocked_by": [],
+      "created_at": "2026-06-06T00:00:00Z"
+    },
+    {
+      "id": "fg-le-cafe-hours-verify",
+      "source_run_id": "2026-06-06-fort-greene-late-outlets",
+      "title": "Verify Le Café Coffee hours",
+      "type": "manual_verification",
+      "owner": "human",
+      "status": "ready",
+      "reason": "Le Café Coffee has workability_score 7.5 (highest in Fort Greene) and vibe_tag '24hr', but hours=null in the DB. A confirmed 24hr spot would be the strongest candidate for a late-hours page. The null hours field prevents the retriever from matching it to open_after queries.",
+      "manual_instructions": [
+        "Search Google Maps for 'Le Café Coffee Fort Greene Brooklyn' and check current listed hours",
+        "Cross-reference with Yelp or a recent review mentioning hours",
+        "If confirmed 24hr: go to /admin → find the spot → edit hours field to set all days {open: '00:00', close: '23:59'} or the actual hours. Set last_verified_at.",
+        "If hours have changed (no longer 24hr): update hours to reflect reality, remove '24hr' from vibe_tags via admin panel",
+        "Mark this task as done in /ai/tasks/fort-greene-2026-06-06.json (change status to 'done')"
+      ],
+      "expected_output": "Structured hours entry in the DB for Le Café Coffee. last_verified_at updated. Vibe_tag '24hr' accurate.",
+      "completion_criteria": [
+        "hours field is not null for Le Café Coffee (spot id: 963c5b46-57a5-4361-9ca2-790d30cc680d)",
+        "last_verified_at is updated to today's date",
+        "vibe_tags reflects actual hours (24hr tag removed if not accurate)"
+      ],
+      "next_run_trigger": "Contributes to unblocking fg-research-rerun. If confirmed 24hr + outlets resolve, Le Café becomes a top candidate for the SEO page.",
+      "risk": "low",
+      "related_spots": [
+        { "id": "963c5b46-57a5-4361-9ca2-790d30cc680d", "name": "Le Café Coffee" }
+      ],
+      "blocked_by": [],
+      "created_at": "2026-06-06T00:00:00Z"
+    },
+    {
+      "id": "fg-moka-outlets-verify",
+      "source_run_id": "2026-06-06-fort-greene-late-outlets",
+      "title": "Verify Moka & Co outlet access",
+      "type": "manual_verification",
+      "owner": "human",
+      "status": "ready",
+      "reason": "Moka & Co is the only approved Fort Greene spot with workability ≥ 6 AND open after 5pm (closes 21:00 weekdays, 23:00 Fri/Sat). Enrichment ran but returned inconclusive on outlets — the notes text didn't provide clear evidence. Manual verification is the only way to resolve this.",
+      "manual_instructions": [
+        "Visit Moka & Co or call them directly",
+        "Check whether outlet/charging access exists for customers — ask staff if uncertain",
+        "Note quantity: abundant (many strips/wall outlets), some (a few spots), rare (1-2 hard to reach), none",
+        "If outlets confirmed: update has_outlets=true and add enrichment note via /admin → spot edit. Update last_verified_at.",
+        "If no outlets: note it — Moka & Co remains a strong candidate but with an honest 'no outlets' label",
+        "Mark this task as done in /ai/tasks/fort-greene-2026-06-06.json (change status to 'done')"
+      ],
+      "expected_output": "has_outlets field resolved to true or false with confidence. last_verified_at updated. If true: Moka & Co becomes the primary Fort Greene after-5pm candidate.",
+      "completion_criteria": [
+        "has_outlets for Moka & Co (id: 5ae0b701-3b5b-4961-be10-8c262a56ddb1) is no longer a Scout default",
+        "last_verified_at is updated",
+        "If outlets confirmed: spot passes 2 of 3 quality gate checks (workability ≥ 6, open after 5pm)"
+      ],
+      "next_run_trigger": "Contributes to unblocking fg-research-rerun. If outlets confirmed, Moka & Co becomes the strongest Fort Greene late-hours candidate. Still need 2 more spots to reach SEO quality gate of 3.",
+      "risk": "low",
+      "related_spots": [
+        { "id": "5ae0b701-3b5b-4961-be10-8c262a56ddb1", "name": "Moka & Co" }
+      ],
+      "blocked_by": [],
+      "created_at": "2026-06-06T00:00:00Z"
+    },
+    {
+      "id": "fg-enrichment-apply",
+      "source_run_id": "2026-06-06-fort-greene-late-outlets",
+      "title": "Apply enrichment to Fort Greene spots",
+      "type": "enrichment",
+      "owner": "human",
+      "status": "blocked",
+      "reason": "After reviewing the dry-run output, apply enrichment to update has_outlets, laptop_friendly, noise_level, and vibe_tags for the 11 unenriched Fort Greene spots. Blocked until dry-run is reviewed — never apply enrichment without reviewing the preview first.",
+      "command": "npm run enrich -- --neighborhood='Fort Greene'",
+      "expected_output": "11 previously unenriched spots updated with enrichment_signals JSONB and any canonical field changes at confidence ≥ threshold. enriched_at set on updated spots.",
+      "completion_criteria": [
+        "enriched_at is not null for Fort Greene approved spots",
+        "No unexpected noise_level overwrites on manually-verified spots",
+        "enrichment_signals JSONB present on updated spots",
+        "DB write count matches dry-run preview"
+      ],
+      "next_run_trigger": "Proceed to fg-curator-rescore to re-score enriched spots with updated field values.",
+      "risk": "low",
+      "related_spots": [],
+      "blocked_by": ["fg-enrichment-dry-run"],
+      "created_at": "2026-06-06T00:00:00Z"
+    },
+    {
+      "id": "fg-curator-rescore",
+      "source_run_id": "2026-06-06-fort-greene-late-outlets",
+      "title": "Re-score Fort Greene spots with Curator",
+      "type": "curator_rescore",
+      "owner": "script",
+      "status": "blocked",
+      "reason": "After enrichment updates canonical fields (has_outlets, noise_level, laptop_friendly), Curator needs to re-score affected spots. Curator uses these fields in its workability assessment — a spot that gained has_outlets=true may score higher, potentially crossing the workability ≥ 6 threshold.",
+      "command": "npm run curate:workability -- --dry-run --limit=20",
+      "expected_output": "Updated workability_score and workability_reasoning for Fort Greene spots whose fields changed during enrichment. Scores may rise for spots that gained outlet/noise confirmations.",
+      "completion_criteria": [
+        "workability_scored_at updated on enriched Fort Greene spots",
+        "workability_score reflects new field values",
+        "Check: did any spots cross the 6.0 threshold that were previously below it?"
+      ],
+      "next_run_trigger": "After rescoring: check how many spots now pass workability ≥ 6 + laptop_friendly + open after 5pm. Then proceed to fg-research-rerun.",
+      "risk": "low",
+      "related_spots": [],
+      "blocked_by": ["fg-enrichment-apply"],
+      "created_at": "2026-06-06T00:00:00Z"
+    },
+    {
+      "id": "fg-research-rerun",
+      "source_run_id": "2026-06-06-fort-greene-late-outlets",
+      "title": "Re-run Research agent for Fort Greene",
+      "type": "research_rerun",
+      "owner": "agent",
+      "status": "blocked",
+      "reason": "After enrichment, manual verifications, and Curator rescoring are complete, re-run the Research agent to reassess the quality gate. The key question: do we now have ≥ 3 spots passing workability ≥ 6 + laptop_friendly + open after 5pm?",
+      "manual_instructions": [
+        "Run the Research agent prompt from /ai/prompts/research-agent.md against current Fort Greene data",
+        "Query: SELECT name, workability_score, has_outlets, laptop_friendly, noise_level, hours, enriched_at FROM spots WHERE neighborhood ILIKE '%fort greene%' AND status='approved' ORDER BY workability_score DESC NULLS LAST",
+        "Count how many spots now pass: workability_score ≥ 6 AND laptop_friendly=true AND close time (from hours) ≥ 21:00",
+        "If ≥ 3 qualify: create a new /ai/runs/ entry and proceed to fg-seo-gate-recheck",
+        "If < 3 qualify: update the quality gate in this tasks file, note what's still missing",
+        "Save output as /ai/runs/fort-greene-rerun-[date].json"
+      ],
+      "expected_output": "Updated count of qualifying spots. If ≥ 3: new run JSON with SEO page proposal. If < 3: updated gap analysis showing remaining blockers.",
+      "completion_criteria": [
+        "New research run JSON saved to /ai/runs/",
+        "qualifying_spots count updated in this tasks file's quality_gate",
+        "Decision made: proceed to SEO proposal or extend the unblock queue"
+      ],
+      "next_run_trigger": "If qualifying_spots ≥ 3: run fg-seo-gate-recheck. If < 3: assess whether to extend verification or create the alternate '/best-cafes-to-work-from-in-fort-greene' page (lower bar, honest about data gaps).",
+      "risk": "low",
+      "related_spots": [],
+      "blocked_by": ["fg-enrichment-apply", "fg-le-cafe-hours-verify", "fg-moka-outlets-verify", "fg-curator-rescore"],
+      "created_at": "2026-06-06T00:00:00Z"
+    },
+    {
+      "id": "fg-seo-gate-recheck",
+      "source_run_id": "2026-06-06-fort-greene-late-outlets",
+      "title": "Re-check SEO quality gate for Fort Greene",
+      "type": "seo_gate",
+      "owner": "agent",
+      "status": "blocked",
+      "reason": "After research confirms ≥ 3 qualifying spots, run the SEO Page Agent to generate the full page proposal: slug, H1, meta, ranked spot list with confidence labels, tradeoffs, and indexability recommendation.",
+      "manual_instructions": [
+        "Only run this if fg-research-rerun confirms qualifying_spots ≥ 3",
+        "If qualifying_spots < 3: this task stays blocked and the loop cycles back to identify further enrichment targets",
+        "Use /ai/prompts/seo-page-agent.md as the agent prompt",
+        "Target query: 'quiet cafes with outlets open after 5pm fort greene brooklyn'",
+        "Save the full proposal to a new /ai/runs/ entry"
+      ],
+      "expected_output": "SEO page proposal JSON with status READY, ON_HOLD, or BLOCKED. If READY: includes slug, H1, meta, ranked spots with confidence labels. If still blocked: updated unblock_actions.",
+      "completion_criteria": [
+        "SEO proposal saved",
+        "Status is explicitly READY, ON_HOLD, or BLOCKED — not ambiguous",
+        "If READY: Donovan reviews and approves before any page is created"
+      ],
+      "next_run_trigger": "If READY: Engineering agent plans the page creation. If ON_HOLD or BLOCKED: update quality_gate in this file and loop back.",
+      "risk": "low",
+      "related_spots": [],
+      "blocked_by": ["fg-research-rerun"],
+      "created_at": "2026-06-06T00:00:00Z"
+    }
+  ]
+}

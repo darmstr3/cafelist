@@ -1,0 +1,148 @@
+{
+  "_version": 1,
+  "_description": "CafeList loop registry. All scheduled automation is declared here. Edit to change schedules, limits, or flags. Changes take effect on next deploy.",
+  "loops": [
+    {
+      "id": "data-freshness",
+      "enabled": true,
+      "cron": "0 6 * * *",
+      "timezone": "UTC",
+      "runner": "data-freshness",
+      "description": "Detects stale spots (enrichment >90d, curation >90d, verification >180d). Queues a bounded batch of the highest-priority stale spots for operator action. Never mutates spots.",
+      "input": {
+        "table": "spots",
+        "staleness_thresholds": {
+          "enriched_at_days": 90,
+          "workability_scored_at_days": 90,
+          "last_verified_at_days": 180
+        }
+      },
+      "output": {
+        "queue": "ops/queues/manual-review.json",
+        "state": "ops/state/loops/data-freshness.json",
+        "log": "ops/logs/loop-runs.jsonl"
+      },
+      "max_items_per_run": 50,
+      "max_exec_time_ms": 30000,
+      "max_iterations": 3,
+      "retry_limit": 2,
+      "cooldown_minutes": 60,
+      "requires_human_review": false,
+      "allows_destructive": false,
+      "supports_dry_run": true
+    },
+    {
+      "id": "publication-quality",
+      "enabled": true,
+      "cron": "30 6 * * *",
+      "timezone": "UTC",
+      "runner": "publication-quality",
+      "description": "Runs quality gate on all approved spots. Classifies publish/hold/review/reject. Writes non-passing spots to manual-review queue.",
+      "input": {
+        "table": "spots",
+        "filter": { "status": "approved" },
+        "thresholds": {
+          "workability_min": 6,
+          "outlet_confidence_min": 0.6,
+          "seo_min_qualifying_spots": 3
+        }
+      },
+      "output": {
+        "queue": "ops/queues/manual-review.json",
+        "state": "ops/state/loops/publication-quality.json",
+        "report": "ops/reports/quality-gate-{date}.json"
+      },
+      "max_items_per_run": 200,
+      "max_exec_time_ms": 45000,
+      "max_iterations": 1,
+      "retry_limit": 2,
+      "cooldown_minutes": 120,
+      "requires_human_review": false,
+      "allows_destructive": false,
+      "supports_dry_run": true
+    },
+    {
+      "id": "duplicate-detection",
+      "enabled": true,
+      "cron": "0 7 * * 1",
+      "timezone": "UTC",
+      "runner": "duplicate-detection",
+      "description": "Weekly scan for duplicate spots via place ID, normalized name, and coordinate proximity (~55m). Read-only. All merges require human approval.",
+      "input": {
+        "table": "spots",
+        "coord_threshold_degrees": 0.0005,
+        "name_similarity_threshold": 0.4
+      },
+      "output": {
+        "queue": "ops/queues/duplicate-candidates.json",
+        "state": "ops/state/loops/duplicate-detection.json",
+        "report": "ops/reports/duplicates-{date}.json"
+      },
+      "max_items_per_run": 1000,
+      "max_exec_time_ms": 30000,
+      "max_iterations": 1,
+      "retry_limit": 1,
+      "cooldown_minutes": 10080,
+      "requires_human_review": true,
+      "allows_destructive": false,
+      "supports_dry_run": true
+    },
+    {
+      "id": "weekly-operations-report",
+      "enabled": true,
+      "cron": "0 9 * * 5",
+      "timezone": "UTC",
+      "runner": "weekly-report",
+      "description": "Auto-collects agent statuses, data metrics, queue states, and loop run history. Writes ops/reports/weekly-YYYY-MM-DD.md. Marks current-priority.md as pending human approval.",
+      "input": {
+        "sources": ["scout_runs", "spots", "agent_query_logs", "agent_prompt_runs", "agent_eval_runs", "loop_runs"]
+      },
+      "output": {
+        "report": "ops/reports/weekly-{date}.md",
+        "state": "ops/state/loops/weekly-report.json",
+        "priority_file": "ops/state/current-priority.md"
+      },
+      "max_items_per_run": 1,
+      "max_exec_time_ms": 20000,
+      "max_iterations": 1,
+      "retry_limit": 2,
+      "cooldown_minutes": 4320,
+      "requires_human_review": true,
+      "allows_destructive": false,
+      "supports_dry_run": false
+    },
+    {
+      "id": "broken-experience",
+      "enabled": true,
+      "cron": "0 8 * * *",
+      "timezone": "UTC",
+      "runner": "broken-experience",
+      "description": "Daily check for broken production signals: approved spots with missing required fields, failed loop runs in the last 24h, stale agent runs (>48h), neighborhoods with no qualifying SEO spots, approved spots without workability scores.",
+      "input": {
+        "checks": [
+          "missing_required_fields",
+          "seo_unqualified_neighborhoods",
+          "failed_loop_runs",
+          "stale_agent_runs",
+          "approved_without_score"
+        ],
+        "thresholds": {
+          "agent_stale_hours": 48,
+          "loop_failed_window_hours": 24
+        }
+      },
+      "output": {
+        "queue": "ops/queues/manual-review.json",
+        "state": "ops/state/loops/broken-experience.json"
+      },
+      "max_items_per_run": 100,
+      "max_exec_time_ms": 20000,
+      "max_iterations": 1,
+      "retry_limit": 2,
+      "cooldown_minutes": 60,
+      "requires_human_review": false,
+      "allows_destructive": false,
+      "supports_dry_run": true
+    }
+  ]
+}

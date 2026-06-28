@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { getSpots } from '@/lib/spots'
+import { PUBLIC_WORKABILITY_FLOOR } from '@/lib/quality'
 import { DEMO_SPOTS } from '@/lib/demo-data'
 import { closingTimeToday } from '@/lib/utils'
 import type { Spot, SpotFilters } from '@/types'
@@ -87,7 +88,7 @@ function adjacencyClusterFor(neighborhood: string): string[] | null {
 // before the daily curator catches them) are EXCLUDED from the strict pass
 // but INCLUDED in the relaxed pass — the relaxed pass is already a softer
 // promise to the user, so admitting unscored data there is acceptable.
-const WORKABILITY_STRICT_MIN = 6
+const WORKABILITY_STRICT_MIN = PUBLIC_WORKABILITY_FLOOR
 const WORKABILITY_RELAXED_MIN = 4
 
 export async function retrieveCafes(intent: ParsedIntent): Promise<RetrievalResult> {
@@ -110,7 +111,14 @@ export async function retrieveCafes(intent: ParsedIntent): Promise<RetrievalResu
   let source: 'supabase' | 'demo' = isSupabaseConfigured() ? 'supabase' : 'demo'
 
   try {
-    const result = await getSpots(filters)
+    // The homepage default gates getSpots() at the strict public floor and
+    // drops unscored rows. The retriever runs its OWN two-stage
+    // strict→relaxed→drop logic below, so it needs the wider pool: opt into
+    // the relaxed floor and unscored rows here, then narrow downstream.
+    const result = await getSpots(filters, {
+      minWorkability: WORKABILITY_RELAXED_MIN,
+      includeUnscored: true,
+    })
     if (result.serviceError) {
       // Mirror the homepage's fallback strategy.
       spots = DEMO_SPOTS

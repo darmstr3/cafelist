@@ -1,0 +1,6 @@
+{
+  "_description": "Tracks SEO page readiness by neighborhood. Updated by cafelist:quality-gate --seo.",
+  "_last_run": null,
+  "neighborhoods": {},
+  "note": "Run 'npm run cafelist:quality-gate' to populate neighborhood readiness. States: READY | ON_HOLD | BLOCKED."
+}

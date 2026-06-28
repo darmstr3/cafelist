@@ -1,0 +1,18 @@
+{
+  "_description": "Manual review queue. Items written by cafelist:quality-gate, cafelist:check-stale. Human reviews and resolves each item.",
+  "_format": {
+    "id": "string — spot UUID",
+    "name": "string — spot name",
+    "why_flagged": "string — reason for review",
+    "evidence": "object — supporting data",
+    "severity": "high | medium | low",
+    "recommended_action": "string",
+    "source_freshness": "object — enriched_at, last_verified_at, workability_scored_at",
+    "flagged_at": "ISO timestamp",
+    "flagged_by": "string — script that flagged this",
+    "resolved_at": "ISO timestamp | null",
+    "resolution": "approved | rejected | deferred | edited | null",
+    "resolution_notes": "string | null"
+  },
+  "items": []
+}
