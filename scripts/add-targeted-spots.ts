@@ -105,7 +105,7 @@ async function main() {
     // 1. Search for the place
     let candidates
     try {
-      candidates = await textSearch({ query: target.query })
+      candidates = await textSearch(target.query)
     } catch (e) {
       console.error(`  ✗ textSearch failed: ${(e as Error).message}`)
       continue
