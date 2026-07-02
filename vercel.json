@@ -1,5 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "_crons_disabled_note": "Scout paused 2026-05-25 during NYC flood backfill (scripts/flood-nyc.ts). To restore: re-add the entry below to the empty crons array. path='/api/scout', schedule='7 */4 * * *' — every 4 hours at minute 7. Restore once backfill + Curator catch-up are done, OR delete the entry permanently if the manual flood proves to be sufficient ongoing coverage.",
   "crons": []
 }
