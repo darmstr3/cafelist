@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { logEvent, normalizeQuery } from '@/lib/events'
 import { Spot, SpotFilters } from '@/types'
 import { SpotCard } from './SpotCard'
 import { FilterBar } from './FilterBar'
@@ -76,6 +77,66 @@ export function SpotsDirectory({ initialSpots, cities }: SpotsDirectoryProps) {
     })
   }, [initialSpots, filters])
 
+  // ── Instrumentation ─────────────────────────────────────────────
+  // cafe_search: debounced 800ms, ≥2 chars, dedup identical consecutive queries.
+  // filter_apply: debounced 600ms so rapid pill toggling collapses into one
+  // event describing the net change. Initial mount never fires.
+  const prevFiltersRef = useRef<SpotFilters>(DEFAULT_FILTERS)
+  const lastQueryRef = useRef('')
+  const resultCount = filtered.length
+
+  useEffect(() => {
+    const q = normalizeQuery(filters.search)
+    if (q.length < 2 || q === lastQueryRef.current) return
+    const t = setTimeout(() => {
+      lastQueryRef.current = q
+      logEvent('cafe_search', {
+        payload: { query: q, result_count: resultCount, surface: 'home_directory' },
+      })
+    }, 800)
+    return () => clearTimeout(t)
+  }, [filters.search, resultCount])
+
+  useEffect(() => {
+    const prev = prevFiltersRef.current
+    const changed = (Object.keys(filters) as Array<keyof SpotFilters>).filter(
+      (k) => k !== 'search' && filters[k] !== prev[k]
+    )
+    if (changed.length === 0) return
+    const t = setTimeout(() => {
+      prevFiltersRef.current = filters
+      const active = (Object.keys(filters) as Array<keyof SpotFilters>).filter((k) => {
+        if (k === 'search') return false
+        const v = filters[k]
+        return typeof v === 'boolean' ? v : typeof v === 'number' ? v > 0 : v !== ''
+      })
+      logEvent('filter_apply', {
+        payload: {
+          changed,
+          active,
+          neighborhood: filters.neighborhood || null,
+          result_count: resultCount,
+          surface: 'home_directory',
+        },
+      })
+    }, 600)
+    return () => clearTimeout(t)
+  }, [filters, resultCount])
+
+  // spot_click from the homepage grid — capture-phase delegation so
+  // SpotCard can stay a server-compatible component.
+  function handleGridClickCapture(e: React.MouseEvent) {
+    const a = (e.target as HTMLElement).closest('a[href^="/spot/"]') as HTMLAnchorElement | null
+    if (!a) return
+    const slug = a.getAttribute('href')!.slice('/spot/'.length)
+    const idx = filtered.findIndex((s) => s.slug === slug)
+    const spot = idx >= 0 ? filtered[idx] : undefined
+    logEvent('spot_click', {
+      spot_id: spot?.id,
+      payload: { slug, position: idx >= 0 ? idx + 1 : null, surface: 'home_directory' },
+    })
+  }
+
   const activeFilterCount = Object.entries(filters).filter(([k, v]) => {
     if (k === 'search' || k === 'city') return v !== ''
     if (typeof v === 'boolean') return v
@@ -102,7 +163,7 @@ export function SpotsDirectory({ initialSpots, cities }: SpotsDirectoryProps) {
   }, [initialSpots])
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" onClickCapture={handleGridClickCapture}>
       {/* City header — anchors the user, signals breadth */}
       <div className="mb-4 flex items-baseline gap-2 flex-wrap">
         <h1 className="text-[20px] font-semibold" style={{ color: 'var(--text-primary)' }}>
