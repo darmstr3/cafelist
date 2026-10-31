@@ -20,11 +20,31 @@
  * Note: this agent intentionally never writes last_verified_at — that
  * column is only ever stamped at admin-approval time (see lib/spots.ts).
  * workability_score is a vibe/fit signal, not a verification event.
+ *
+ * Overlap guard: runCurator() acquires a lock in the curator_runs table
+ * (supabase/migrations/20261031_curator_runs.sql — PREPARED, NOT YET
+ * APPLIED to production as of this writing; applying a migration is a
+ * production-DB write and needs explicit approval, same as merging this
+ * PR) before doing any scoring. The lock is a real Postgres constraint
+ * (a partial unique index on status='running'), not an application-level
+ * check, so it's race-free even under two near-simultaneous invocations.
+ * Until that migration is applied, acquireLock() detects the missing
+ * table and *fails open* (logs a warning, proceeds without the lock)
+ * rather than refusing to run — same "don't let optional telemetry block
+ * the main loop" convention lib/scout.ts already uses for scout_runs.
+ * That means there is NO overlap protection yet on this branch; it exists
+ * in code and is ready the moment the migration lands.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { callClaudeJson, DEFAULT_MODEL } from './labs/anthropic'
 import type { Spot } from '../types'
+
+// A run holds the lock for at most this long before a later caller is
+// allowed to treat it as dead (crashed, hard-timed-out) and sweep it.
+// Comfortably above api/curate/route.ts's maxDuration=90s, comfortably
+// below the ~24h gap between daily cron invocations.
+export const CURATOR_LOCK_STALE_MINUTES = 15
 
 // ── Tunable constants ─────────────────────────────────────────
 
@@ -72,7 +92,7 @@ export interface Distribution {
   byType: Record<string, { total: number; viable_ge_6: number; avg: number | null }>
 }
 
-export type CuratorRunStatus = 'success' | 'partial' | 'cap_hit' | 'error'
+export type CuratorRunStatus = 'success' | 'partial' | 'cap_hit' | 'error' | 'already_running'
 
 export interface CuratorResult {
   status: CuratorRunStatus
@@ -85,6 +105,11 @@ export interface CuratorResult {
   before: Distribution
   after: Distribution
   error_message?: string | null
+  /** Set once curator_runs exists; null if the lock table isn't there yet
+   * (migration not applied) or the lock couldn't be written for another
+   * reason — in which case this run proceeded WITHOUT overlap protection. */
+  runId?: string | null
+  lockHeld?: boolean
 }
 
 interface CuratorOutput {
@@ -279,6 +304,106 @@ async function fetchBatch(
   return (data ?? []) as Spot[]
 }
 
+// ── Overlap guard (curator_runs lock) ─────────────────────────
+
+const MISSING_TABLE_CODES = new Set(['42P01']) // undefined_table
+const UNIQUE_VIOLATION_CODE = '23505'
+
+/** Sweep any 'running' row older than CURATOR_LOCK_STALE_MINUTES to
+ * 'error' so a crashed/hard-timed-out run can't wedge the lock forever.
+ * Best-effort: a failure here just means acquireLock() will find out
+ * directly when it tries to insert. */
+async function sweepStaleLock(supabase: SupabaseClient, logger: (msg: string) => void): Promise<void> {
+  const staleCutoff = new Date(Date.now() - CURATOR_LOCK_STALE_MINUTES * 60 * 1000).toISOString()
+  const { error } = await supabase
+    .from('curator_runs')
+    .update({ status: 'error', error_message: 'stale lock swept by a later run', finished_at: new Date().toISOString() })
+    .eq('status', 'running')
+    .lt('started_at', staleCutoff)
+  if (error && !MISSING_TABLE_CODES.has(error.code ?? '')) {
+    logger(`[curator] ⚠ Couldn't sweep stale lock: ${error.message}`)
+  }
+}
+
+/**
+ * Tries to acquire the curator_runs lock (INSERT with status='running',
+ * guarded by a partial unique index — see the migration). Three outcomes:
+ *   - { ok: true, runId }       — lock acquired, caller should proceed
+ *   - { ok: false, reason: 'already_running' } — a real lock is held;
+ *     caller must NOT proceed (no LLM calls, no cost).
+ *   - { ok: false, reason: 'no_lock_table' }    — curator_runs doesn't
+ *     exist yet (migration not applied). Caller proceeds WITHOUT a lock
+ *     (fail-open), same as scout_runs' existing degrade-gracefully
+ *     convention — this is NOT a safe default to rely on long-term, just
+ *     a bridge until the migration lands.
+ */
+async function acquireLock(
+  supabase: SupabaseClient,
+  dryRun: boolean,
+  costCapUsd: number,
+  logger: (msg: string) => void
+): Promise<{ ok: true; runId: string } | { ok: false; reason: 'already_running' | 'no_lock_table' }> {
+  await sweepStaleLock(supabase, logger)
+
+  const { data, error } = await supabase
+    .from('curator_runs')
+    .insert({ status: 'running', dry_run: dryRun, cost_cap_usd: costCapUsd })
+    .select('run_id')
+    .single()
+
+  if (!error) {
+    return { ok: true, runId: (data as { run_id: string }).run_id }
+  }
+
+  if (error.code === UNIQUE_VIOLATION_CODE) {
+    logger('[curator] Another curator run is already in progress. Aborting — no LLM calls made.')
+    return { ok: false, reason: 'already_running' }
+  }
+
+  if (MISSING_TABLE_CODES.has(error.code ?? '') || /curator_runs/i.test(error.message)) {
+    logger(
+      '[curator] ⚠ curator_runs table not found (migration 20261031_curator_runs.sql not yet applied) — proceeding WITHOUT an overlap guard.'
+    )
+    return { ok: false, reason: 'no_lock_table' }
+  }
+
+  // Unknown error — fail open rather than block the agent entirely, but
+  // surface it loudly since this is unexpected.
+  logger(`[curator] ⚠ Couldn't acquire curator_runs lock (${error.message}) — proceeding WITHOUT an overlap guard.`)
+  return { ok: false, reason: 'no_lock_table' }
+}
+
+async function releaseLock(
+  supabase: SupabaseClient,
+  runId: string | null,
+  patch: {
+    status: Exclude<CuratorRunStatus, 'already_running'>
+    processed: number
+    updated: number
+    failed: number
+    costUsd: number
+    errorMessage?: string | null
+  },
+  logger: (msg: string) => void
+): Promise<void> {
+  if (!runId) return
+  const { error } = await supabase
+    .from('curator_runs')
+    .update({
+      status: patch.status,
+      processed: patch.processed,
+      updated: patch.updated,
+      failed: patch.failed,
+      cost_usd: patch.costUsd,
+      error_message: patch.errorMessage ?? null,
+      finished_at: new Date().toISOString(),
+    })
+    .eq('run_id', runId)
+  if (error) {
+    logger(`[curator] ⚠ Couldn't release curator_runs lock cleanly: ${error.message}`)
+  }
+}
+
 // ── Main entrypoint ───────────────────────────────────────────
 
 /**
@@ -303,6 +428,29 @@ export async function runCurator(
   logger(
     `[curator] Starting. dry-run=${dryRun} force=${force} limit=${limit === Infinity ? '∞' : limit} cost-cap=$${costCapUsd.toFixed(2)} concurrency=${concurrency} model=${DEFAULT_MODEL}`
   )
+
+  const lock = await acquireLock(supabase, dryRun, costCapUsd, logger)
+  if (!lock.ok && lock.reason === 'already_running') {
+    // A real lock is held by another in-flight run. Abort before any LLM
+    // call or DB read — this run does nothing and costs nothing.
+    const empty: Distribution = { total: 0, scored: 0, unscored: 0, buckets: {}, byType: {} }
+    return {
+      status: 'already_running',
+      processed: 0,
+      updated: 0,
+      failed: 0,
+      costUsd: 0,
+      costCapUsd,
+      costCapHit: false,
+      before: empty,
+      after: empty,
+      error_message: null,
+      runId: null,
+      lockHeld: false,
+    }
+  }
+  const runId = lock.ok ? lock.runId : null
+  const lockHeld = lock.ok
 
   const before = await snapshotDistribution(supabase, logger)
 
@@ -386,6 +534,20 @@ export async function runCurator(
   logger(`  failed:          ${failed}`)
   logger(`  cost (USD):      $${totalCostUsd.toFixed(4)}  (cap $${costCapUsd.toFixed(2)}${costCapHit ? ' — HIT' : ''})`)
 
+  await releaseLock(
+    supabase,
+    runId,
+    {
+      status,
+      processed,
+      updated,
+      failed,
+      costUsd: totalCostUsd,
+      errorMessage,
+    },
+    logger
+  )
+
   return {
     status,
     processed,
@@ -397,5 +559,7 @@ export async function runCurator(
     before,
     after,
     error_message: errorMessage,
+    runId,
+    lockHeld,
   }
 }

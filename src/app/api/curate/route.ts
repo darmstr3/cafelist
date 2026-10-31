@@ -44,6 +44,14 @@ export const dynamic = 'force-dynamic'
  *   - force=1        ignore the 90-day staleness gate, re-score everyone
  *   - limit=<n>       override DEFAULT_CRON_LIMIT for this run
  *   - costCap=<usd>   override DEFAULT_COST_CAP_USD for this run
+ *
+ * Overlap guard: runCurator() acquires a lock in curator_runs
+ * (supabase/migrations/20261031_curator_runs.sql) before any LLM call.
+ * If another run is already in flight, this returns immediately with
+ * `status: "already_running"` and zero cost — it does not queue, retry,
+ * or wait. Until that migration is applied, there is no lock yet and
+ * runCurator() logs a warning and proceeds unguarded (see src/lib/
+ * curator.ts's acquireLock() for the exact fail-open behavior).
  */
 export async function GET(req: NextRequest) {
   const curatorSecret = process.env.CURATOR_CRON_SECRET

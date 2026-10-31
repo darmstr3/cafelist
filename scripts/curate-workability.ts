@@ -155,6 +155,10 @@ async function main() {
     console.log(`  viable share:    ${viablePct}% (target: 40–60% drop from 100% review-only baseline)`)
   }
 
+  if (result.status === 'already_running') {
+    console.log('[curator] Another curator run is already in progress — this invocation did nothing. Not an error.')
+    return
+  }
   if (result.status === 'error') {
     console.error(`[curator] FATAL: ${result.error_message}`)
     process.exit(1)
