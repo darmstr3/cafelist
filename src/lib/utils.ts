@@ -176,6 +176,24 @@ export function isDataConfidenceUnknown(
   return !spot.last_verified_at && !spot.enriched_at && !spot.workability_scored_at
 }
 
+// True when a spot has been confirmed recently enough to stand behind a
+// score with no caveat — the "verified" tier of the three the
+// outlet_status/data_confidence migration introduces (verified / inferred
+// / unknown). Added 2026-10-31: the UX review found `isDataConfidenceUnknown`
+// alone wasn't enough to distinguish "confirmed fact" from "AI/editorial
+// estimate" — both rendered as an identical plain score, with no visual
+// cue that an unverified-but-nonzero-signal score is an estimate rather
+// than a confirmed one. Mirrors the migration's own 90-day backfill CASE
+// logic so pre- and post-migration behavior agree.
+export function isDataConfidenceVerified(
+  spot: Pick<Spot, 'data_confidence' | 'last_verified_at'>
+): boolean {
+  if (spot.data_confidence != null) return spot.data_confidence === 'verified'
+  if (!spot.last_verified_at) return false
+  const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000
+  return Date.now() - new Date(spot.last_verified_at).getTime() < ninetyDaysMs
+}
+
 // ── Type label helpers ────────────────────────────────────────
 
 export const TYPE_LABELS: Record<string, string> = {

@@ -12,6 +12,7 @@ import {
   isOpenNow, formatHoursDisplay, formatScore,
   typeLabel, is24Hours, formatTime,
   isDataConfidenceUnknown,
+  isDataConfidenceVerified,
 } from '@/lib/utils'
 import { ReviewForm } from '@/components/ReviewForm'
 import { SpotActions } from '@/components/SpotActions'
@@ -187,10 +188,11 @@ function WorkabilityHero({ spot }: { spot: Spot }) {
     )
   }
 
-  // Confidence below "verified/inferred" — we have a number, but not
-  // enough confirmed signal to stand behind its precision. Show honest
-  // placeholder copy instead of a one-decimal score. See
-  // isDataConfidenceUnknown() in lib/utils.ts.
+  // Zero signal at all — no last_verified_at, no enrichment, no
+  // workability_scored_at. Show honest placeholder copy instead of a
+  // one-decimal score. See isDataConfidenceUnknown() in lib/utils.ts.
+  // A score with SOME signal but below "verified" still renders below,
+  // just labeled as an estimate rather than hidden — see isEstimate.
   if (isDataConfidenceUnknown(spot)) {
     return (
       <section
@@ -213,6 +215,13 @@ function WorkabilityHero({ spot }: { spot: Spot }) {
 
   const score = Number(spot.workability_score)
   const meta = workabilityLabel(score)
+  // "Inferred" tier: a real score exists but hasn't been confirmed
+  // recently (isDataConfidenceVerified false). Added 2026-10-31 — shown
+  // with a visible "estimate" caveat rather than either (a) presenting
+  // it identically to a verified score, or (b) hiding it below the
+  // "unknown" bar above, which would blank out all 176 approved venues
+  // today since none currently meet the 90-day verified threshold.
+  const isEstimate = !isDataConfidenceVerified(spot)
   return (
     <section
       className="p-5 rounded-xl border mb-6"
@@ -241,7 +250,9 @@ function WorkabilityHero({ spot }: { spot: Spot }) {
         </p>
       )}
       <p className="text-[10px] mt-2" style={{ color: 'var(--text-muted)' }}>
-        Cafelist editorial — based on reviews, hours, and venue type
+        {isEstimate
+          ? 'Cafelist AI estimate — based on reviews, hours, and venue type. Not independently confirmed recently.'
+          : 'Cafelist editorial — based on reviews, hours, and venue type. Confirmed within the last 90 days.'}
       </p>
     </section>
   )
