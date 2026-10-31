@@ -1,3 +1,5 @@
+import { cache } from 'react'
+import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -18,6 +20,133 @@ import { Spot, SpotHours } from '@/types'
 
 interface PageProps {
   params: Promise<{ id: string }>
+}
+
+// Dedupe the spot fetch between generateMetadata and the page render.
+const getSpot = cache(getSpotBySlug)
+
+const SITE = 'https://cafelist.app'
+
+function buildTitle(spot: Spot): string {
+  const base = spot.neighborhood
+    ? `${spot.name} — laptop-friendly café in ${spot.neighborhood}, NYC`
+    : `${spot.name} — laptop-friendly café in NYC`
+  const full = `${base} | Cafelist`
+  if (full.length <= 70) return full
+  // Too long: drop the "laptop-friendly" phrasing before truncating the name.
+  const short = spot.neighborhood
+    ? `${spot.name} — café in ${spot.neighborhood}, NYC | Cafelist`
+    : `${spot.name} — café in NYC | Cafelist`
+  return short
+}
+
+function hoursSummary(hours: SpotHours | null): string | null {
+  if (!hours) return null
+  const open = DAYS.map((d) => hours[d]).filter(Boolean)
+  if (open.length === 0) return null
+  const first = open[0]!
+  const same = open.every((h) => h!.open === first.open && h!.close === first.close)
+  if (same && open.length === 7) return `Open daily ${formatTime(first.open)}–${formatTime(first.close)}.`
+  return `Open ${open.length} days a week.`
+}
+
+function buildDescription(spot: Spot): string {
+  const facts: string[] = []
+  const hs = hoursSummary(spot.hours)
+  if (hs) facts.push(hs)
+  if (spot.has_wifi) facts.push('Wi-Fi.')
+  if (spot.has_outlets) facts.push('Outlets.')
+  const factText = facts.join(' ')
+  const reasoning = (spot.workability_reasoning ?? '').replace(/\s+/g, ' ').trim()
+  const lead = reasoning || `${spot.name}${spot.neighborhood ? ` in ${spot.neighborhood}` : ''}, NYC — a laptop-friendly spot vetted by Cafelist.`
+  const max = 155
+  const reserve = factText ? factText.length + 1 : 0
+  let head = lead
+  if (head.length + reserve > max) {
+    const room = Math.max(max - reserve - 1, 60)
+    const cut = head.slice(0, room)
+    const lastSpace = cut.lastIndexOf(' ')
+    head = (lastSpace > 40 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:.—-]+$/, '') + '…'
+  }
+  const out = factText ? `${head} ${factText}` : head
+  return out.length > max + 5 ? out.slice(0, max - 1).trimEnd() + '…' : out
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { id: slug } = await params
+  const spot = await getSpot(slug)
+  if (!spot) {
+    return { title: 'Spot not found | Cafelist', robots: { index: false, follow: false } }
+  }
+  const title = buildTitle(spot)
+  const description = buildDescription(spot)
+  const image = spot.photos?.[0]?.url
+  const url = `/spot/${spot.slug}`
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      title,
+      description,
+      url,
+      type: 'website',
+      siteName: 'Cafelist',
+      ...(image ? { images: [{ url: image }] } : {}),
+    },
+    twitter: {
+      card: image ? 'summary_large_image' : 'summary',
+      title,
+      description,
+      ...(image ? { images: [image] } : {}),
+    },
+  }
+}
+
+const DAY_SCHEMA: Record<(typeof DAYS)[number], string> = {
+  monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday', thursday: 'Thursday',
+  friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday',
+}
+
+function buildJsonLd(spot: Spot) {
+  const image = spot.photos?.[0]?.url
+  const hours = spot.hours
+    ? DAYS.flatMap((d) => {
+        const h = spot.hours?.[d]
+        return h && h.open && h.close
+          ? [{
+              '@type': 'OpeningHoursSpecification',
+              dayOfWeek: DAY_SCHEMA[d],
+              opens: h.open,
+              closes: h.close,
+            }]
+          : []
+      })
+    : []
+  const amenities = [
+    spot.has_wifi ? { '@type': 'LocationFeatureSpecification', name: 'Wi-Fi', value: true } : null,
+    spot.has_outlets ? { '@type': 'LocationFeatureSpecification', name: 'Power outlets', value: true } : null,
+  ].filter(Boolean)
+  // Deliberately no aggregateRating / review: Cafelist has no real user reviews.
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CafeOrCoffeeShop',
+    name: spot.name,
+    url: `${SITE}/spot/${spot.slug}`,
+    ...(image ? { image } : {}),
+    address: {
+      '@type': 'PostalAddress',
+      streetAddress: spot.address,
+      addressLocality: 'New York',
+      addressRegion: 'NY',
+      addressCountry: 'US',
+    },
+    ...(spot.lat != null && spot.lng != null
+      ? { geo: { '@type': 'GeoCoordinates', latitude: spot.lat, longitude: spot.lng } }
+      : {}),
+    ...(hours.length ? { openingHoursSpecification: hours } : {}),
+    ...(amenities.length ? { amenityFeature: amenities } : {}),
+  }
 }
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
@@ -153,7 +282,7 @@ function StarRating({ value }: { value: number | null }) {
 
 export default async function SpotDetailPage({ params }: PageProps) {
   const { id: slug } = await params
-  const spot = await getSpotBySlug(slug)
+  const spot = await getSpot(slug)
   if (!spot) notFound()
 
   const reviews = await getReviewsBySpotId(spot.id)
@@ -207,6 +336,12 @@ export default async function SpotDetailPage({ params }: PageProps) {
         neighborhood={spot.neighborhood ?? null}
         workabilityScore={spot.workability_score == null ? null : Number(spot.workability_score)}
         openNow={open}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(buildJsonLd(spot)).replace(/</g, '\\u003c'),
+        }}
       />
       {/* ── Hero photo (40vh, full-width) ── */}
       {heroPhoto ? (
