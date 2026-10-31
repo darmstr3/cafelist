@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter, Fraunces } from 'next/font/google'
 import { WebAnalytics } from '@/components/WebAnalytics'
 import { PageViewTracker } from '@/components/PageViewTracker'
+import { Footer } from '@/components/Footer'
 import './globals.css'
 
 const inter = Inter({
@@ -17,23 +18,29 @@ const fraunces = Fraunces({
   display: 'swap',
 })
 
+// Homepage-targeted by default — every route segment without its own
+// `metadata`/`generateMetadata` inherits this. Routes that need their own
+// title (guides, spot pages) override it; routes that previously had no
+// metadata at all (/find, /near-me, /submit) now get a per-segment
+// `layout.tsx` instead of silently duplicating this title — see those
+// folders for why that was a real duplicate-title/no-canonical bug.
 export const metadata: Metadata = {
   metadataBase: new URL('https://cafelist.app'),
-  title: 'Cafelist — Worth your time',
+  title: 'Laptop-Friendly Cafés in NYC | Cafelist',
   description:
-    'A handpicked directory of coffee shops and hotel lobbies actually worth your time. Wi-Fi, outlets, noise level, late-night hours — verified, not aggregated.',
-  keywords: ['coffee shop', 'remote work', 'laptop friendly', 'wifi', 'hotel lobby', 'work from cafe', 'cafe list', 'NYC'],
+    'Find laptop-friendly cafés in NYC with real Wi-Fi, outlets, and noise-level info — not aggregated review-site guesses. Filter by neighborhood, open-late hours, and amenities.',
+  keywords: ['laptop friendly cafes nyc', 'coffee shop wifi outlets', 'remote work cafe nyc', 'work from cafe', 'cafe list', 'NYC coffee shops'],
   openGraph: {
-    title: 'Cafelist — Worth your time',
-    description: 'A handpicked directory of cafés and hotel lobbies actually worth your time.',
+    title: 'Laptop-Friendly Cafés in NYC | Cafelist',
+    description: 'A handpicked directory of laptop-friendly cafés and hotel lobbies in NYC — Wi-Fi, outlets, noise level, late-night hours.',
     type: 'website',
     siteName: 'Cafelist',
     url: 'https://cafelist.app',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Cafelist — Worth your time',
-    description: 'A handpicked directory of cafés and hotel lobbies actually worth your time.',
+    title: 'Laptop-Friendly Cafés in NYC | Cafelist',
+    description: 'A handpicked directory of laptop-friendly cafés and hotel lobbies in NYC — Wi-Fi, outlets, noise level, late-night hours.',
   },
 }
 
@@ -42,6 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${inter.variable} ${fraunces.variable}`}>
       <body className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--background)' }}>
         <main className="flex-1">{children}</main>
+        <Footer />
         <WebAnalytics />
         <PageViewTracker />
       </body>
