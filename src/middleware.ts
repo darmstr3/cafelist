@@ -95,16 +95,19 @@ export async function middleware(req: NextRequest) {
   if (isProtected(pathname, req.method)) {
     const expected = process.env.ADMIN_PASSWORD
     const username = process.env.ADMIN_USERNAME ?? 'admin'
-    const isProd = process.env.VERCEL_ENV === 'production'
+    // Fail closed everywhere except local `next dev`. Preview deployments
+    // read the production database with the service role (/admin/analytics),
+    // so an unset password must never open the gate there.
+    const isLocalDev = process.env.NODE_ENV === 'development' && !process.env.VERCEL_ENV
 
     if (!expected) {
-      if (isProd) {
+      if (!isLocalDev) {
         return new NextResponse(
           'admin gate misconfigured: ADMIN_PASSWORD env var is not set',
           { status: 503 },
         )
       }
-      // dev: fall through to Supabase refresh
+      // local dev only: fall through to Supabase refresh
     } else {
       const header = req.headers.get('authorization') ?? ''
       if (!header.toLowerCase().startsWith('basic ')) return unauthorized()
