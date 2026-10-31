@@ -161,8 +161,8 @@ function Dashboard({ snap }: { snap: AnalyticsSnapshot }) {
               <thead>
                 <tr style={{ color: 'var(--text-muted)' }}>
                   <Th>Day</Th>
-                  <Th right>Sessions</Th>
                   <Th right>Page views</Th>
+                  <Th right>Sessions</Th>
                   <Th>&nbsp;</Th>
                 </tr>
               </thead>
@@ -170,8 +170,8 @@ function Dashboard({ snap }: { snap: AnalyticsSnapshot }) {
                 {[...snap.daily].reverse().map((d) => (
                   <tr key={d.day} className="border-t" style={{ borderColor: 'var(--border-subtle)' }}>
                     <Td>{d.day}</Td>
-                    <Td right>{d.sessions}</Td>
                     <Td right>{d.pageViews}</Td>
+                    <Td right>{d.sessions}</Td>
                     <Td w="45%">
                       <Bar value={d.sessions} max={maxDaily} />
                     </Td>
