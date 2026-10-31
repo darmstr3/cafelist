@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { logEvent } from '@/lib/events'
 
 interface ReviewFormProps {
   spotId: string
@@ -69,6 +70,15 @@ export function ReviewForm({ spotId }: ReviewFormProps) {
       })
       if (res.ok) {
         setState('success')
+        // No author name or comment text — just which dimensions were rated.
+        logEvent('review_submit', {
+          spot_id: spotId,
+          payload: {
+            rated: (['wifi_rating', 'outlet_rating', 'noise_rating', 'seating_rating', 'late_night_rating'] as const)
+              .filter((k) => form[k] > 0),
+            has_comment: form.comment.trim().length > 0,
+          },
+        })
       } else {
         setState('error')
       }

@@ -12,6 +12,7 @@ import {
 } from '@/lib/utils'
 import { ReviewForm } from '@/components/ReviewForm'
 import { SpotActions } from '@/components/SpotActions'
+import { SpotViewTracker } from '@/components/SpotViewTracker'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { Spot, SpotHours } from '@/types'
 
@@ -200,6 +201,13 @@ export default async function SpotDetailPage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen pb-20 lg:pb-8">
+      <SpotViewTracker
+        spotId={spot.id}
+        slug={spot.slug}
+        neighborhood={spot.neighborhood ?? null}
+        workabilityScore={spot.workability_score == null ? null : Number(spot.workability_score)}
+        openNow={open}
+      />
       {/* ── Hero photo (40vh, full-width) ── */}
       {heroPhoto ? (
         <div className="relative w-full h-[40vh] min-h-[280px]">
@@ -518,7 +526,7 @@ export default async function SpotDetailPage({ params }: PageProps) {
                   loading="lazy"
                 />
                 <div className="grid grid-cols-2 gap-0 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
-                  <a
+                  <a data-track="directions" data-provider="apple" data-placement="map_card"
                     href={`https://maps.apple.com/?q=${encodeURIComponent(spot.name)}&address=${encodeURIComponent(spot.address)}`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -527,7 +535,7 @@ export default async function SpotDetailPage({ params }: PageProps) {
                   >
                     Apple Maps
                   </a>
-                  <a
+                  <a data-track="directions" data-provider="google" data-placement="map_card"
                     href={
                       spot.google_place_id
                         ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name + ' ' + spot.address)}&query_place_id=${spot.google_place_id}`
@@ -579,7 +587,7 @@ export default async function SpotDetailPage({ params }: PageProps) {
             backdropFilter: 'blur(12px)',
           }}
         >
-          <a
+          <a data-track="directions" data-provider="apple" data-placement="sticky_mobile"
             href={`https://maps.apple.com/?q=${encodeURIComponent(spot.name)}&address=${encodeURIComponent(spot.address)}`}
             target="_blank"
             rel="noopener noreferrer"
@@ -593,7 +601,7 @@ export default async function SpotDetailPage({ params }: PageProps) {
             <Navigation size={15} />
             Apple Maps
           </a>
-          <a
+          <a data-track="directions" data-provider="google" data-placement="sticky_mobile"
             href={
               spot.google_place_id
                 ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name + ' ' + spot.address)}&query_place_id=${spot.google_place_id}`

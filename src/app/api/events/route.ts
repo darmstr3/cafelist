@@ -10,16 +10,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
+import type { EventType } from '@/lib/events'
 
 interface EventBody {
-  event_type:
-    | 'page_view'
-    | 'spot_click'
-    | 'near_me_search'
-    | 'near_me_result_click'
-    | 'sign_in'
-    | 'sign_out'
-    | 'submit_attempt'
+  event_type: EventType
   path?: string
   spot_id?: string
   payload?: Record<string, unknown>
@@ -34,7 +28,15 @@ const VALID_TYPES = new Set([
   'sign_in',
   'sign_out',
   'submit_attempt',
+  'cafe_search',
+  'filter_apply',
+  'cafe_view',
+  'directions_click',
+  'review_submit',
 ])
+
+// Cap payload size so a malicious client can't stuff the table.
+const MAX_PAYLOAD_BYTES = 2000
 
 export async function POST(req: NextRequest) {
   let body: EventBody
@@ -48,6 +50,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Invalid event_type' }, { status: 400 })
   }
 
+  const payload = body.payload ?? {}
+  if (JSON.stringify(payload).length > MAX_PAYLOAD_BYTES) {
+    return NextResponse.json({ ok: false, error: 'Payload too large' }, { status: 413 })
+  }
+  const spotId =
+    body.spot_id && /^[0-9a-f-]{36}$/i.test(body.spot_id) ? body.spot_id : null
+
   const supabase = await createSupabaseServerClient()
   const {
     data: { user },
@@ -58,8 +67,8 @@ export async function POST(req: NextRequest) {
     session_id: body.session_id ?? null,
     event_type: body.event_type,
     path: body.path?.slice(0, 500) ?? null,
-    spot_id: body.spot_id ?? null,
-    payload: body.payload ?? {},
+    spot_id: spotId,
+    payload,
     user_agent: req.headers.get('user-agent')?.slice(0, 500) ?? null,
   })
 

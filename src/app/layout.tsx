@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Inter, Fraunces } from 'next/font/google'
+import { WebAnalytics } from '@/components/WebAnalytics'
 import './globals.css'
 
 const inter = Inter({
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${inter.variable} ${fraunces.variable}`}>
       <body className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--background)' }}>
         <main className="flex-1">{children}</main>
+        <WebAnalytics />
       </body>
     </html>
   )
