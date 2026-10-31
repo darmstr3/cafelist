@@ -6,7 +6,7 @@ import { Spot, SpotFilters } from '@/types'
 import { SpotCard } from './SpotCard'
 import { FilterBar } from './FilterBar'
 import { SearchBar } from './SearchBar'
-import { isOpenNow, isOpenLate, isOpenAfterMidnight, isWorkScoreUnknown } from '@/lib/utils'
+import { isOpenNow, isOpenLate, isOpenAfterMidnight, meetsWorkScoreThreshold } from '@/lib/utils'
 import { SlidersHorizontal } from 'lucide-react'
 
 const DEFAULT_FILTERS: SpotFilters = {
@@ -66,11 +66,11 @@ export function SpotsDirectory({ initialSpots, cities }: SpotsDirectoryProps) {
       if (filters.hasFood && !spot.has_food) return false
       if (filters.hasDrinks && !spot.has_drinks) return false
       if (filters.noiseLevel && spot.noise_level !== filters.noiseLevel) return false
-      // Treat a scout-agent row stuck at the work_score column default (0)
-      // as "unknown", not "scored zero" — see isWorkScoreUnknown() in
-      // lib/utils.ts. Otherwise this filter buried/excluded 103 of 176
-      // approved spots regardless of how good they actually are.
-      if (filters.minWorkScore > 0 && !isWorkScoreUnknown(spot) && spot.work_score < filters.minWorkScore) return false
+      // Prefers workability_score (the editorial signal) over the legacy
+      // work_score when present, and treats any row stuck at the
+      // work_score column default (0) as "unknown" rather than "scored
+      // zero" — see meetsWorkScoreThreshold() in lib/utils.ts.
+      if (filters.minWorkScore > 0 && !meetsWorkScoreThreshold(spot, filters.minWorkScore)) return false
       if (filters.minLateNightScore > 0 && spot.late_night_score < filters.minLateNightScore) return false
       if (filters.openNow && !isOpenNow(spot.hours)) return false
       if (filters.openLate && !isOpenLate(spot.hours)) return false

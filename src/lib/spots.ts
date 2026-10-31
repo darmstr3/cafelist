@@ -1,13 +1,13 @@
 import { supabase, supabaseAdmin, isSupabaseConfigured } from './supabase'
 import { Spot, SpotFilters, Review } from '@/types'
-import { isOpenNow, isOpenLate, isOpenAfterMidnight, isWorkScoreUnknown } from './utils'
+import { isOpenNow, isOpenLate, isOpenAfterMidnight, isWorkScoreUnknown, meetsWorkScoreThreshold } from './utils'
 import { DEMO_SPOTS, DEMO_CITIES } from './demo-data'
 
 // Re-exported for existing/other call sites — the implementation and the
 // full "unknown vs. actually zero" reasoning live in lib/utils.ts (which is
 // client-safe), since this module pulls in the Supabase admin client and
 // can't be imported from 'use client' components like SpotsDirectory.tsx.
-export { isWorkScoreUnknown }
+export { isWorkScoreUnknown, meetsWorkScoreThreshold }
 
 /**
  * Default "best venues first" ordering, shared by the server query's
@@ -102,7 +102,7 @@ export async function getSpots(filters?: Partial<SpotFilters>): Promise<SpotsRes
   let spots = (data ?? []) as Spot[]
 
   if (filters?.minWorkScore) {
-    spots = spots.filter((s) => isWorkScoreUnknown(s) || s.work_score >= filters.minWorkScore!)
+    spots = spots.filter((s) => meetsWorkScoreThreshold(s, filters.minWorkScore!))
   }
 
   if (filters?.openNow) spots = spots.filter((s) => isOpenNow(s.hours))
@@ -138,7 +138,7 @@ function filterDemoSpots(spots: Spot[], filters?: Partial<SpotFilters>): Spot[] 
   if (filters.hasDrinks) results = results.filter((s) => s.has_drinks)
   if (filters.noiseLevel) results = results.filter((s) => s.noise_level === filters.noiseLevel)
   if (filters.minWorkScore) {
-    results = results.filter((s) => isWorkScoreUnknown(s) || s.work_score >= filters.minWorkScore!)
+    results = results.filter((s) => meetsWorkScoreThreshold(s, filters.minWorkScore!))
   }
   if (filters.minLateNightScore) results = results.filter((s) => s.late_night_score >= filters.minLateNightScore!)
   if (filters.openNow) results = results.filter((s) => isOpenNow(s.hours))
