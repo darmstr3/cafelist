@@ -22,5 +22,5 @@ alter table public.user_events add constraint user_events_event_type_check
     'cafe_search','filter_apply','cafe_view','directions_click','review_submit'
   ]));
 
-create index if not exists user_events_type_created_idx
-  on public.user_events (event_type, created_at desc);
+-- No new index: production already has idx_user_events_type on
+-- (event_type, created_at desc), which covers the dashboard's queries.
