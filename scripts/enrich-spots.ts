@@ -257,6 +257,12 @@ async function main() {
           laptop_friendly: spot.laptop_friendly,
           noise_level: spot.noise_level,
           vibe_tags: spot.vibe_tags ?? [],
+          // outlet_status may not exist on `spot` until the
+          // outlet_status/data_confidence migration has been applied
+          // (supabase/migrations/20261031_outlet_status_and_data_confidence.sql).
+          // Optional chaining here so this script works whether that
+          // migration has landed yet or not — see enrichment-rules.ts.
+          outlet_status: (spot as { outlet_status?: 'confirmed_yes' | 'confirmed_no' | 'unknown' }).outlet_status,
         },
         result.signals
       )

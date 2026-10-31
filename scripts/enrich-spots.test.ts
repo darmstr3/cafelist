@@ -102,6 +102,54 @@ console.log('\n── Unit: decideCanonicalUpdates — promotes confident true �
   assert(JSON.stringify(d.updates.vibe_tags) === JSON.stringify(['quiet', 'outlets']), 'vibe_tags deduped')
 }
 
+console.log('\n── Unit: decideCanonicalUpdates — outlet_status stays in lockstep ─')
+{
+  // 2026-10-31 cross-branch fix: has_outlets and outlet_status (added by
+  // the outlet_status/data_confidence migration on the sibling
+  // fix/score-pipeline-and-presentation branch) must never diverge, or a
+  // future resync of the derived has_outlets column would silently
+  // clobber what this script wrote.
+  const signals = baseSignals({
+    outlets: { value: 'abundant', confidence: 0.8, evidence: 'outlets at every table' },
+  })
+
+  const withColumn = decideCanonicalUpdates(defaultCurrent({ outlet_status: 'unknown' }), signals)
+  assert(
+    withColumn.updates.has_outlets === true && withColumn.updates.outlet_status === 'confirmed_yes',
+    'promoting has_outlets=true also writes outlet_status=confirmed_yes when the column is present'
+  )
+
+  const columnAlreadyConfirmed = decideCanonicalUpdates(
+    defaultCurrent({ outlet_status: 'confirmed_yes' }),
+    signals
+  )
+  assert(
+    columnAlreadyConfirmed.updates.outlet_status === undefined,
+    'does not rewrite outlet_status when already confirmed_yes (has_outlets already true too, so has_outlets is also skipped)'
+  )
+
+  // Pre-migration compatibility: no outlet_status key on CanonicalCurrentState
+  // at all (undefined, not just unset) must not throw and must not write
+  // outlet_status, so this script works whether or not that migration has
+  // been applied yet.
+  const withoutColumn = decideCanonicalUpdates(defaultCurrent(), signals)
+  assert(
+    withoutColumn.updates.has_outlets === true && withoutColumn.updates.outlet_status === undefined,
+    'omitting outlet_status entirely (column not migrated yet) still promotes has_outlets, writes no outlet_status'
+  )
+
+  // Never promotes confirmed_no, even on a confident absence signal —
+  // mirrors the existing never-write-false rule for has_outlets itself.
+  const noSignal = decideCanonicalUpdates(
+    defaultCurrent({ outlet_status: 'unknown' }),
+    baseSignals({ outlets: { value: 'none', confidence: 0.95, evidence: 'no outlets anywhere' } })
+  )
+  assert(
+    noSignal.updates.outlet_status === undefined,
+    'a confident "none" signal never promotes outlet_status to confirmed_no'
+  )
+}
+
 console.log('\n── Unit: decideCanonicalUpdates — thresholds & existing values ─')
 {
   // noise needs >=0.7, not just >=0.6

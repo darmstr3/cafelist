@@ -51,15 +51,31 @@ export interface EnrichmentOutput {
 /** The subset of current spot state the write rule needs to decide
  * what, if anything, to overwrite. Deliberately narrow (not the whole
  * Spot) so tests can construct fixtures without the full row shape. */
+export type OutletStatus = 'confirmed_yes' | 'confirmed_no' | 'unknown'
+
 export interface CanonicalCurrentState {
   has_outlets: boolean
   laptop_friendly: boolean
   noise_level: NoiseLevel | null
   vibe_tags: string[]
+  /**
+   * Added 2026-10-31 alongside the outlet_status/data_confidence migration
+   * (supabase/migrations/20261031_outlet_status_and_data_confidence.sql on
+   * fix/score-pipeline-and-presentation). That migration makes has_outlets
+   * a column DERIVED from outlet_status ("has_outlets iff outlet_status =
+   * confirmed_yes") and documents the convention that anything writing
+   * outlet data should write outlet_status, not has_outlets directly.
+   * Optional here (rather than required) so this file and its tests don't
+   * hard-depend on that migration having landed first — when the column
+   * doesn't exist yet, callers simply omit it and the behavior is
+   * unchanged from before this migration existed.
+   */
+  outlet_status?: OutletStatus
 }
 
 export interface CanonicalUpdates {
   has_outlets?: true
+  outlet_status?: OutletStatus
   laptop_friendly?: true
   noise_level?: NoiseLevel
   vibe_tags?: string[]
@@ -105,6 +121,14 @@ export function decideCanonicalUpdates(
   const notes: string[] = []
 
   // ── has_outlets: only ever promote to true ──
+  // outlet_status is written in lockstep with has_outlets (same gate, same
+  // branch) so the two never diverge — per the convention the
+  // outlet_status/data_confidence migration establishes ("has_outlets is
+  // DERIVED from outlet_status; write outlet_status, not has_outlets").
+  // Still never writes 'confirmed_no': that would require a confident
+  // *absence* signal, which this function deliberately never promotes to
+  // the boolean either (same "never write false over a default" rule) —
+  // a confident 'none'/'rare' reading stays in enrichment_signals only.
   if (current.has_outlets) {
     notes.push('has_outlets: skip (already true, not touching)')
   } else if (signals.outlets.value === 'unknown') {
@@ -113,6 +137,9 @@ export function decideCanonicalUpdates(
     notes.push(`has_outlets: skip (confidence ${signals.outlets.confidence} < ${OUTLETS_CONFIDENCE_THRESHOLD})`)
   } else if (signals.outlets.value === 'abundant' || signals.outlets.value === 'some') {
     updates.has_outlets = true
+    if (current.outlet_status !== undefined && current.outlet_status !== 'confirmed_yes') {
+      updates.outlet_status = 'confirmed_yes'
+    }
     notes.push(`has_outlets: write true (outlets=${signals.outlets.value}, confidence=${signals.outlets.confidence})`)
   } else {
     // value is 'rare' or 'none' — never write false, per the safety rule above.
