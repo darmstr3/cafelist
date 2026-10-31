@@ -1,7 +1,36 @@
 import { supabase, supabaseAdmin, isSupabaseConfigured } from './supabase'
 import { Spot, SpotFilters, Review } from '@/types'
-import { isOpenNow, isOpenLate, isOpenAfterMidnight } from './utils'
+import { isOpenNow, isOpenLate, isOpenAfterMidnight, isWorkScoreUnknown } from './utils'
 import { DEMO_SPOTS, DEMO_CITIES } from './demo-data'
+
+// Re-exported for existing/other call sites — the implementation and the
+// full "unknown vs. actually zero" reasoning live in lib/utils.ts (which is
+// client-safe), since this module pulls in the Supabase admin client and
+// can't be imported from 'use client' components like SpotsDirectory.tsx.
+export { isWorkScoreUnknown }
+
+/**
+ * Default "best venues first" ordering, shared by the server query's
+ * fallback sort and the demo-data path. Primary signal is
+ * `workability_score` (the editorial, type-aware signal the Curator
+ * computes for every approved row — see scripts/curate-workability.ts),
+ * descending, NULLS LAST so unscored rows don't out-rank scored ones but
+ * also don't get buried below legitimately low scores. `work_score` is
+ * only a tiebreak, and only a meaningful one when it isn't `isWorkScoreUnknown()`.
+ */
+function compareByEditorialRank(a: Spot, b: Spot): number {
+  const aw = a.workability_score
+  const bw = b.workability_score
+  if (aw != null && bw != null && aw !== bw) return bw - aw
+  if (aw != null && bw == null) return -1
+  if (aw == null && bw != null) return 1
+
+  const aUnknown = isWorkScoreUnknown(a)
+  const bUnknown = isWorkScoreUnknown(b)
+  if (aUnknown && !bUnknown) return 1
+  if (!aUnknown && bUnknown) return -1
+  return b.work_score - a.work_score
+}
 
 // ── Fetch all approved spots (with filters) ───────────────────
 
@@ -17,10 +46,17 @@ export async function getSpots(filters?: Partial<SpotFilters>): Promise<SpotsRes
     return { spots: filterDemoSpots(DEMO_SPOTS, filters), serviceError: false }
   }
 
+  // Default sort: workability_score (editorial, exists for all 176 approved
+  // rows) first, work_score (structurally missing for scout-agent rows — see
+  // isWorkScoreUnknown() above) only as a tiebreak. Previously this ordered
+  // by work_score alone, which sank every scout-agent row — including ones
+  // the curator itself rated 7+ on workability — to the bottom of the
+  // directory, because 0 sorted as "worst", not "unknown".
   let query = supabase
     .from('spots')
     .select('*')
     .eq('status', 'approved')
+    .order('workability_score', { ascending: false, nullsFirst: false })
     .order('work_score', { ascending: false })
 
   if (filters?.city && filters.city !== '') {
@@ -41,7 +77,10 @@ export async function getSpots(filters?: Partial<SpotFilters>): Promise<SpotsRes
   if (filters?.hasDrinks) query = query.eq('has_drinks', true)
   if (filters?.noiseLevel) query = query.eq('noise_level', filters.noiseLevel)
   if (filters?.type) query = query.eq('type', filters.type)
-  if (filters?.minWorkScore) query = query.gte('work_score', filters.minWorkScore)
+  // minWorkScore is NOT applied as a DB-level .gte('work_score', …) filter
+  // (that was the bug): a scout-agent row with work_score=0 would fail any
+  // nonzero threshold even though 0 means "never scored", not "scored and
+  // bad". Applied post-fetch below, where isWorkScoreUnknown() can exempt it.
   if (filters?.minLateNightScore) query = query.gte('late_night_score', filters.minLateNightScore)
 
   let data, error
@@ -62,6 +101,10 @@ export async function getSpots(filters?: Partial<SpotFilters>): Promise<SpotsRes
 
   let spots = (data ?? []) as Spot[]
 
+  if (filters?.minWorkScore) {
+    spots = spots.filter((s) => isWorkScoreUnknown(s) || s.work_score >= filters.minWorkScore!)
+  }
+
   if (filters?.openNow) spots = spots.filter((s) => isOpenNow(s.hours))
   if (filters?.openLate) spots = spots.filter((s) => isOpenLate(s.hours))
   if (filters?.openAfter9pm) spots = spots.filter((s) => isOpenLate(s.hours))
@@ -73,7 +116,7 @@ export async function getSpots(filters?: Partial<SpotFilters>): Promise<SpotsRes
 // ── Client-side demo filter (mirrors DB-level filters) ────────
 
 function filterDemoSpots(spots: Spot[], filters?: Partial<SpotFilters>): Spot[] {
-  let results = [...spots].sort((a, b) => b.work_score - a.work_score)
+  let results = [...spots].sort(compareByEditorialRank)
 
   if (!filters) return results
 
@@ -94,7 +137,9 @@ function filterDemoSpots(spots: Spot[], filters?: Partial<SpotFilters>): Spot[] 
   if (filters.hasFood) results = results.filter((s) => s.has_food)
   if (filters.hasDrinks) results = results.filter((s) => s.has_drinks)
   if (filters.noiseLevel) results = results.filter((s) => s.noise_level === filters.noiseLevel)
-  if (filters.minWorkScore) results = results.filter((s) => s.work_score >= filters.minWorkScore!)
+  if (filters.minWorkScore) {
+    results = results.filter((s) => isWorkScoreUnknown(s) || s.work_score >= filters.minWorkScore!)
+  }
   if (filters.minLateNightScore) results = results.filter((s) => s.late_night_score >= filters.minLateNightScore!)
   if (filters.openNow) results = results.filter((s) => isOpenNow(s.hours))
   if (filters.openLate) results = results.filter((s) => isOpenLate(s.hours))

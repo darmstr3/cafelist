@@ -7,15 +7,27 @@
  *   "Can a remote worker realistically sit here for 2+ hours with a laptop
  *    without feeling pressured to leave?"
  *
- * This is deliberately distinct from `work_score`, which is a review-derived
- * average of wifi/outlets/seating ratings. work_score = "is the work setup
- * good?" — workability_score = "will the *vibe* let you stay?"
+ * This is deliberately distinct from `work_score`, which is NOT derived from
+ * Cafelist's own on-platform reviews (the `reviews` table has ~2 rows total
+ * — it's essentially unused). `work_score` is a heuristic computed by
+ * scoreFromReviews() in lib/google-places.ts, which mines Google Places
+ * review text for wifi/outlet/seating keyword hits and, when there's no
+ * usable English review text, falls back to a rating-proxy derived from
+ * Google's star rating. work_score = "what does the Google-review-keyword
+ * heuristic say about the work setup?" — workability_score = "will the
+ * *vibe* let you stay?"
  *
  * Why a separate score: review-based averages tend to over-rate restaurants
  * and bars (people rate the food/drinks 5/5 and the wifi 4/5, dragging the
  * work_score up), even though no one would actually camp there for 2 hours
  * during a dinner rush. The curator looks at type/vibe_tags/notes/hours
  * holistically and applies common sense.
+ *
+ * Note: work_score is also structurally missing (stuck at the raw column
+ * default) for every scout-agent-submitted row, because nothing currently
+ * backfills it after Scout inserts — see lib/spots.ts's isWorkScoreUnknown()
+ * for how reads handle that. This script does not write work_score at all;
+ * it only ever writes workability_score/_reasoning/_scored_at.
  *
  * Modes — same script, both modes:
  *   - Backfill:    re-score every row missing a score

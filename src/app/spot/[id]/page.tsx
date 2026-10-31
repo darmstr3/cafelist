@@ -11,6 +11,7 @@ import { getSpotBySlug, getReviewsBySpotId } from '@/lib/spots'
 import {
   isOpenNow, formatHoursDisplay, formatScore,
   typeLabel, is24Hours, formatTime,
+  isDataConfidenceUnknown,
 } from '@/lib/utils'
 import { ReviewForm } from '@/components/ReviewForm'
 import { SpotActions } from '@/components/SpotActions'
@@ -181,6 +182,30 @@ function WorkabilityHero({ spot }: { spot: Spot }) {
         <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
           We haven&apos;t given this spot a workability score yet. Check back soon, or leave a
           review to help.
+        </p>
+      </section>
+    )
+  }
+
+  // Confidence below "verified/inferred" — we have a number, but not
+  // enough confirmed signal to stand behind its precision. Show honest
+  // placeholder copy instead of a one-decimal score. See
+  // isDataConfidenceUnknown() in lib/utils.ts.
+  if (isDataConfidenceUnknown(spot)) {
+    return (
+      <section
+        className="p-4 rounded-xl border mb-6"
+        style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border-subtle)' }}
+      >
+        <p
+          className="text-[11px] font-semibold uppercase tracking-wide mb-1"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          Not yet verified
+        </p>
+        <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+          We have an early read on this spot but haven&apos;t confirmed enough to show a precise
+          score yet. Check back soon, or leave a review to help.
         </p>
       </section>
     )

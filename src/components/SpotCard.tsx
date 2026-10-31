@@ -10,6 +10,7 @@ import {
   is24Hours,
   isOpenAfter9pm,
   isOpenAfterMidnight,
+  isDataConfidenceUnknown,
 } from '@/lib/utils'
 
 interface SpotCardProps {
@@ -52,13 +53,21 @@ function positiveChipsForSpot(spot: Spot): PositiveChip[] {
   return chips.slice(0, 3) // cap to keep the card tidy
 }
 
-function workabilityChip(spot: Spot): { score: string; tone: 'great' | 'good' | 'ok' } | null {
+type WorkabilityChipData =
+  | { kind: 'score'; score: string; tone: 'great' | 'good' | 'ok' }
+  | { kind: 'unverified' }
+
+function workabilityChip(spot: Spot): WorkabilityChipData | null {
   if (spot.workability_score == null) return null
+  // Confidence below "verified/inferred" — don't present a precise
+  // one-decimal number we can't actually stand behind. See
+  // isDataConfidenceUnknown() in lib/utils.ts.
+  if (isDataConfidenceUnknown(spot)) return { kind: 'unverified' }
   const s = Number(spot.workability_score)
   const score = s.toFixed(1)
-  if (s >= 8) return { score, tone: 'great' }
-  if (s >= 6) return { score, tone: 'good' }
-  if (s >= 4) return { score, tone: 'ok' }
+  if (s >= 8) return { score, tone: 'great', kind: 'score' }
+  if (s >= 6) return { score, tone: 'good', kind: 'score' }
+  if (s >= 4) return { score, tone: 'ok', kind: 'score' }
   return null // hide low scores — no need to advertise a 2.5
 }
 
@@ -85,11 +94,17 @@ function PositiveChipBadge({ chip }: { chip: PositiveChip }) {
   )
 }
 
-function WorkabilityBadge({
-  data,
-}: {
-  data: { score: string; tone: 'great' | 'good' | 'ok' }
-}) {
+function WorkabilityBadge({ data }: { data: WorkabilityChipData }) {
+  if (data.kind === 'unverified') {
+    return (
+      <span
+        className="px-1.5 py-0.5 rounded-md text-[10px] sm:text-[11px] font-semibold whitespace-nowrap"
+        style={{ backgroundColor: 'var(--surface-3)', color: 'var(--text-muted)' }}
+      >
+        Not yet verified
+      </span>
+    )
+  }
   const s = WORKABILITY_TONE_STYLES[data.tone]
   return (
     <span

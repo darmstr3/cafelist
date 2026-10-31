@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { SpotHours, DayHours } from '@/types'
+import { SpotHours, DayHours, Spot } from '@/types'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -115,6 +115,38 @@ export function scoreBg(score: number): string {
 
 export function formatScore(score: number): string {
   return score.toFixed(1)
+}
+
+// `work_score` is a Google-review-keyword-derived score (see
+// scoreFromReviews() in lib/google-places.ts), not a score built from
+// Cafelist's own on-platform reviews. Its scoring engine clamps to a
+// 2.0 floor, so a row sitting at exactly the raw column default (0) was
+// never run through it — that's true for every scout-agent row today,
+// because the curator pipeline only ever writes `workability_score`,
+// never backfills `work_score`. Treat that combination as "unknown",
+// not "scored zero" — see the fuller note in lib/spots.ts. Lives here
+// (not lib/spots.ts) so client components can import it without pulling
+// in the Supabase admin client.
+export function isWorkScoreUnknown(spot: Pick<Spot, 'work_score' | 'submitted_by'>): boolean {
+  return spot.work_score === 0 && spot.submitted_by === 'scout-agent'
+}
+
+// True when a spot's data is unverified/unconfirmed enough that showing a
+// precise one-decimal score would overstate our confidence. Presentation
+// code should show "Not yet verified" (or similar) instead in this case.
+//
+// Prefers the `data_confidence` column added by
+// supabase/migrations/20261031_outlet_status_and_data_confidence.sql once
+// it's applied and flowing through `select('*')`. Until then (or for any
+// caller that hasn't re-fetched with the new column), falls back to the
+// equivalent direct check the migration's own backfill logic uses:
+// "no enrichment signal of any kind" — no last_verified_at, no
+// enriched_at, no workability_scored_at.
+export function isDataConfidenceUnknown(
+  spot: Pick<Spot, 'data_confidence' | 'last_verified_at' | 'enriched_at' | 'workability_scored_at'>
+): boolean {
+  if (spot.data_confidence != null) return spot.data_confidence === 'unknown'
+  return !spot.last_verified_at && !spot.enriched_at && !spot.workability_scored_at
 }
 
 // ── Type label helpers ────────────────────────────────────────

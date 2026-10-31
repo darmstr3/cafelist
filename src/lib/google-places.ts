@@ -247,6 +247,16 @@ export function mapPlaceType(types: string[]): string {
 }
 
 // ── Review → scores engine ────────────────────────────────────
+//
+// NOTE on what this actually scores: everything below mines GOOGLE
+// Places review text (and, when there's no usable English review text,
+// falls back to a proxy derived from Google's star rating — see
+// `ratingProxy` in scoreFromReviews()). It has nothing to do with
+// Cafelist's own on-platform `reviews` table (~2 rows total, essentially
+// unused). Treat `work_score` as a "Google-review-keyword heuristic /
+// rating-proxy fallback", not as "derived from real user reviews of this
+// spot on Cafelist" — a prior version of this comment's framing implied
+// the latter, including in scripts/curate-workability.ts's docstring.
 
 interface WorkScores {
   wifi_score: number
