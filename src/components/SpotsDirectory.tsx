@@ -171,7 +171,7 @@ export function SpotsDirectory({ initialSpots, cities }: SpotsDirectoryProps) {
       {/* City header — anchors the user, signals breadth */}
       <div className="mb-4 flex items-baseline gap-2 flex-wrap">
         <h1 className="text-[20px] font-semibold" style={{ color: 'var(--text-primary)' }}>
-          New York
+          Laptop-friendly cafés in New York
         </h1>
         <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
           {initialSpots.length} cafés · {openNowCount} open now

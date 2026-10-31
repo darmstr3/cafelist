@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next'
 import { getSpots } from '@/lib/spots'
+import { GUIDES } from '@/lib/guides'
 
 const SITE = 'https://cafelist.app'
 
@@ -18,6 +19,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: path === '' ? 1 : 0.6,
   }))
 
+  // Landing pages built for the 2026-11 growth push — see lib/guides.ts.
+  const guidePages: MetadataRoute.Sitemap = GUIDES.map((g) => ({
+    url: `${SITE}/guides/${g.slug}`,
+    changeFrequency: 'weekly',
+    priority: 0.7,
+  }))
+
   const spotPages: MetadataRoute.Sitemap = spots
     .filter((s) => s.slug)
     .map((s) => ({
@@ -27,5 +35,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     }))
 
-  return [...staticPages, ...spotPages]
+  return [...staticPages, ...guidePages, ...spotPages]
 }
