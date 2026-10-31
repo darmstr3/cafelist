@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { SpotsDirectory } from '@/components/SpotsDirectory'
 import { NearMeBanner } from '@/components/NearMeBanner'
@@ -6,6 +7,10 @@ import { getSpots, getCities } from '@/lib/spots'
 import { getCurrentUser } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+}
 
 export default async function HomePage() {
   const [{ spots, serviceError }, cities, user] = await Promise.all([

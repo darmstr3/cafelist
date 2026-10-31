@@ -16,6 +16,7 @@ const fraunces = Fraunces({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://cafelist.app'),
   title: 'Cafelist — Worth your time',
   description:
     'A handpicked directory of coffee shops and hotel lobbies actually worth your time. Wi-Fi, outlets, noise level, late-night hours — verified, not aggregated.',
