@@ -1,0 +1,59 @@
+-- ============================================================
+-- scout_priority: drop the stale (city, neighborhood)-only unique
+-- index so coverage_gap rows can coexist with hardcoded seeds
+-- ============================================================
+--
+-- Bug: scout_priority currently carries TWO unique indexes that
+-- encode contradictory invariants:
+--
+--   scout_priority_unique_active   UNIQUE (city, COALESCE(neighborhood,''), source)
+--   idx_scout_priority_city_hood   UNIQUE (city, COALESCE(neighborhood,''))
+--
+-- scripts/coverage-gap.ts upserts with
+-- `onConflict: 'city,neighborhood,source'`, which matches the first
+-- index (one row per city+neighborhood+source — i.e. a 'hardcoded'
+-- seed and a 'coverage_gap' demand signal for the same place are
+-- meant to coexist as separate rows). But idx_scout_priority_city_hood
+-- additionally forbids two rows for the same (city, neighborhood) at
+-- all, regardless of source. Since 19 of the 20 hardcoded seeds have
+-- no neighborhood, any coverage_gap row for one of those cities
+-- collides with idx_scout_priority_city_hood and the insert dies with
+-- "duplicate key value violates unique constraint
+-- idx_scout_priority_city_hood". The upsert catches the error, logs
+-- it, and the script still exits 0 — so this has been silently
+-- broken since idx_scout_priority_city_hood was introduced
+-- (2026-05-25): scout_priority has only ever held the original 20
+-- hardcoded seeds, zero source='coverage_gap' rows, despite the
+-- coverage-gap pipeline running on a schedule.
+--
+-- Rationale for the fix (option a: drop the stale index, not merge
+-- coverage_gap into the seed row):
+--   - scripts/coverage-gap.ts's own upsert, its priority_score
+--     design (COVERAGE_GAP_WEIGHT = 100, explicitly built so a
+--     demand signal "comfortably beats a hardcoded seed") and its
+--     comments all assume hardcoded and coverage_gap are separate,
+--     independently-scored rows for the same place, picked between
+--     at read time by `ORDER BY priority_score DESC` — not merged
+--     into one row.
+--   - Every reader of scout_priority (src/lib/scout.ts's
+--     pickNextCity, src/lib/admin/ops-queries.ts's ops-dashboard
+--     counts) selects/orders/counts across rows and filters by
+--     `source` when it cares about provenance. None of them assume
+--     or require "at most one row per (city, neighborhood)
+--     regardless of source" — that invariant has no reader relying
+--     on it, so it is safe to drop.
+--   - Merging (option b) would mean mutating a hardcoded seed's
+--     priority_score/metadata based on transient demand data with a
+--     30-day expiry, which fights the seed's own
+--     `ON CONFLICT ... DO NOTHING` idempotency contract
+--     (20260514_scout_priority_seed.sql) and would need new
+--     unmerge/expiry logic to revert the seed when the signal
+--     expires. Dropping the index is simpler and matches the
+--     pipeline's existing design.
+--
+-- Net effect: scout_priority_unique_active (city, neighborhood,
+-- source) remains as the real invariant — at most one row per
+-- place per source — which is exactly what the upsert's
+-- onConflict already targets.
+
+DROP INDEX IF EXISTS idx_scout_priority_city_hood;
