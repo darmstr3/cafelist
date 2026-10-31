@@ -69,6 +69,21 @@ export interface Spot {
   workability_score: number | null
   workability_reasoning: string | null
   workability_scored_at: string | null
+  // Scout enrichment pipeline — see scripts/enrich-spots.ts (not present
+  // in this worktree, lives elsewhere) and lib/scout.ts.
+  enriched_at?: string | null
+  enrichment_signals?: Record<string, unknown> | null
+  // Added by supabase/migrations/20261031_outlet_status_and_data_confidence.sql
+  // (prepared, NOT yet applied in production — see that file). Optional
+  // until applied, since `select('*')` won't return it before then.
+  // outlet_status is the tri-state source of truth for outlet presence;
+  // has_outlets is now a derived display convenience (true iff
+  // outlet_status='confirmed_yes') once that migration runs.
+  outlet_status?: 'confirmed_yes' | 'confirmed_no' | 'unknown' | null
+  // Rolls up how much to trust this row's scores/attributes for display
+  // purposes. 'unknown' means "show honest placeholder copy, not a
+  // precise number" — see isDataConfidenceUnknown() in lib/utils.ts.
+  data_confidence?: 'verified' | 'inferred' | 'unknown' | null
   created_at: string
   updated_at: string
 }

@@ -10,6 +10,8 @@ import {
   is24Hours,
   isOpenAfter9pm,
   isOpenAfterMidnight,
+  isDataConfidenceUnknown,
+  isDataConfidenceVerified,
 } from '@/lib/utils'
 
 interface SpotCardProps {
@@ -52,13 +54,29 @@ function positiveChipsForSpot(spot: Spot): PositiveChip[] {
   return chips.slice(0, 3) // cap to keep the card tidy
 }
 
-function workabilityChip(spot: Spot): { score: string; tone: 'great' | 'good' | 'ok' } | null {
+type WorkabilityChipData =
+  // `estimate: true` = confidence is "inferred", not "verified" — a real
+  // AI/editorial score, just not confirmed recently. Shown with a
+  // distinct "Est." marker rather than hidden, per the 2026-10-31 UX
+  // review: hiding every score more than 90 days stale would blank out
+  // all 176 approved venues today, which overcorrects past "unknown" and
+  // into "uninformative." Only a true zero-signal row (isDataConfidenceUnknown)
+  // gets the full "Not yet verified" placeholder below.
+  | { kind: 'score'; score: string; tone: 'great' | 'good' | 'ok'; estimate: boolean }
+  | { kind: 'unverified' }
+
+function workabilityChip(spot: Spot): WorkabilityChipData | null {
   if (spot.workability_score == null) return null
+  // Zero signal at all — don't present a precise one-decimal number we
+  // can't stand behind in any form. See isDataConfidenceUnknown() in
+  // lib/utils.ts.
+  if (isDataConfidenceUnknown(spot)) return { kind: 'unverified' }
   const s = Number(spot.workability_score)
   const score = s.toFixed(1)
-  if (s >= 8) return { score, tone: 'great' }
-  if (s >= 6) return { score, tone: 'good' }
-  if (s >= 4) return { score, tone: 'ok' }
+  const estimate = !isDataConfidenceVerified(spot)
+  if (s >= 8) return { score, tone: 'great', kind: 'score', estimate }
+  if (s >= 6) return { score, tone: 'good', kind: 'score', estimate }
+  if (s >= 4) return { score, tone: 'ok', kind: 'score', estimate }
   return null // hide low scores — no need to advertise a 2.5
 }
 
@@ -85,18 +103,30 @@ function PositiveChipBadge({ chip }: { chip: PositiveChip }) {
   )
 }
 
-function WorkabilityBadge({
-  data,
-}: {
-  data: { score: string; tone: 'great' | 'good' | 'ok' }
-}) {
+function WorkabilityBadge({ data }: { data: WorkabilityChipData }) {
+  if (data.kind === 'unverified') {
+    return (
+      <span
+        className="px-1.5 py-0.5 rounded-md text-[10px] sm:text-[11px] font-semibold whitespace-nowrap"
+        style={{ backgroundColor: 'var(--surface-3)', color: 'var(--text-muted)' }}
+      >
+        Not yet verified
+      </span>
+    )
+  }
   const s = WORKABILITY_TONE_STYLES[data.tone]
   return (
     <span
       className="px-1.5 py-0.5 rounded-md text-[10px] sm:text-[11px] font-bold whitespace-nowrap"
       style={{ backgroundColor: s.bg, color: s.color }}
+      title={data.estimate ? 'AI estimate from past reviews — not independently confirmed recently' : undefined}
     >
       {data.score}/10 · {s.label}
+      {data.estimate && (
+        <span className="font-semibold opacity-70" style={{ fontWeight: 500 }}>
+          {' '}· est.
+        </span>
+      )}
     </span>
   )
 }
