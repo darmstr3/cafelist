@@ -152,6 +152,14 @@ function TopBar({ fetchedAt }: { fetchedAt: string }) {
           Analytics
         </Link>
 
+        <Link
+          href="/admin/status"
+          className="text-xs font-medium transition-opacity hover:opacity-70"
+          style={{ color: 'var(--accent)' }}
+        >
+          Mission control
+        </Link>
+
         <div
           className="ml-auto flex items-center gap-3 text-[11px]"
           style={{ color: 'var(--text-muted)' }}
