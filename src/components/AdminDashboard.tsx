@@ -150,17 +150,30 @@ export function AdminDashboard({ initialSpots, initialReviews, initialScoutRuns 
             Moderate spots and reviews before they go live.
           </p>
         </div>
-        <Link
-          href="/roadmap"
-          className="text-xs font-medium px-3 py-1.5 rounded-lg border transition-opacity hover:opacity-80"
-          style={{
-            borderColor: 'var(--border)',
-            color: 'var(--text-secondary)',
-            backgroundColor: 'var(--surface-2)',
-          }}
-        >
-          View roadmap →
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href="/admin/status"
+            className="text-xs font-medium px-3 py-1.5 rounded-lg border transition-opacity hover:opacity-80"
+            style={{
+              borderColor: 'var(--accent)',
+              color: 'var(--accent)',
+              backgroundColor: 'var(--accent-glow)',
+            }}
+          >
+            Mission control →
+          </Link>
+          <Link
+            href="/roadmap"
+            className="text-xs font-medium px-3 py-1.5 rounded-lg border transition-opacity hover:opacity-80"
+            style={{
+              borderColor: 'var(--border)',
+              color: 'var(--text-secondary)',
+              backgroundColor: 'var(--surface-2)',
+            }}
+          >
+            View roadmap →
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}
