@@ -4,6 +4,10 @@
     {
       "path": "/api/scout",
       "schedule": "7 9 * * *"
+    },
+    {
+      "path": "/api/curate",
+      "schedule": "37 11 * * *"
     }
   ]
 }
