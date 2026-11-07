@@ -65,14 +65,17 @@ export function NearMeBanner() {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 sm:py-7 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
         <div className="flex-1">
+          {/* Was 18-20px font-semibold sans — read as a form label, not a
+              pitch. This is the first sentence anyone reads on the whole
+              site; it should sound like it, not like UI copy. */}
           <h2
-            className="text-[18px] sm:text-[20px] font-semibold leading-tight"
+            className="wordmark text-[26px] sm:text-[34px] leading-[1.05] tracking-tight"
             style={{ color: 'var(--text-primary)' }}
           >
-            Find a workable cafe near you
+            Find a workable café<br className="hidden sm:block" /> near you.
           </h2>
           <p
-            className="text-[13px] mt-1 leading-snug"
+            className="text-[13px] sm:text-[14px] mt-2 leading-snug max-w-md"
             style={{ color: 'var(--text-secondary)' }}
           >
             One tap. We&apos;ll show good spots within walking distance, ranked by how
