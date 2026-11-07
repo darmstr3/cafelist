@@ -13,6 +13,7 @@ import {
   isDataConfidenceUnknown,
   isDataConfidenceVerified,
 } from '@/lib/utils'
+import { workabilityTierForScore } from '@/lib/workability'
 
 interface SpotCardProps {
   spot: Spot
@@ -62,7 +63,7 @@ type WorkabilityChipData =
   // all 176 approved venues today, which overcorrects past "unknown" and
   // into "uninformative." Only a true zero-signal row (isDataConfidenceUnknown)
   // gets the full "Not yet verified" placeholder below.
-  | { kind: 'score'; score: string; tone: 'great' | 'good' | 'ok'; estimate: boolean }
+  | { kind: 'score'; score: number; estimate: boolean }
   | { kind: 'unverified' }
 
 function workabilityChip(spot: Spot): WorkabilityChipData | null {
@@ -72,23 +73,14 @@ function workabilityChip(spot: Spot): WorkabilityChipData | null {
   // lib/utils.ts.
   if (isDataConfidenceUnknown(spot)) return { kind: 'unverified' }
   const s = Number(spot.workability_score)
-  const score = s.toFixed(1)
+  if (workabilityTierForScore(s) == null) return null // hide low scores — no need to advertise a 2.5
   const estimate = !isDataConfidenceVerified(spot)
-  if (s >= 8) return { score, tone: 'great', kind: 'score', estimate }
-  if (s >= 6) return { score, tone: 'good', kind: 'score', estimate }
-  if (s >= 4) return { score, tone: 'ok', kind: 'score', estimate }
-  return null // hide low scores — no need to advertise a 2.5
+  return { kind: 'score', score: s, estimate }
 }
 
 const CHIP_TONE_STYLES: Record<PositiveChip['tone'], { bg: string; color: string }> = {
   strong: { bg: 'rgba(47,125,79,0.14)', color: 'var(--yes)' },
   soft:   { bg: 'rgba(47,125,79,0.06)', color: 'var(--yes)' },
-}
-
-const WORKABILITY_TONE_STYLES: Record<'great' | 'good' | 'ok', { bg: string; color: string; label: string }> = {
-  great: { bg: 'rgba(47,125,79,0.18)', color: 'var(--yes)',   label: 'great' },
-  good:  { bg: 'rgba(47,125,79,0.12)', color: 'var(--yes)',   label: 'good' },
-  ok:    { bg: 'rgba(198,133,18,0.12)', color: 'var(--kinda)', label: 'ok' },
 }
 
 function PositiveChipBadge({ chip }: { chip: PositiveChip }) {
@@ -103,30 +95,47 @@ function PositiveChipBadge({ chip }: { chip: PositiveChip }) {
   )
 }
 
+// ── Grade stamp ─────────────────────────────────────────────
+// Previously a single line of small gray text ("8.2/10 · great")
+// competing with the Wi-Fi/Outlets chips for attention — on the
+// one product whose whole premise is "we scored this." Now it's
+// the loudest thing in the card: a round stamp with the number,
+// a filled ring in the tier color, and the tier word spelled out
+// next to it. Same thresholds, same "· est." honesty marker,
+// just weighted like it's the point.
 function WorkabilityBadge({ data }: { data: WorkabilityChipData }) {
   if (data.kind === 'unverified') {
     return (
       <span
-        className="px-1.5 py-0.5 rounded-md text-[10px] sm:text-[11px] font-semibold whitespace-nowrap"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] sm:text-[11px] font-semibold whitespace-nowrap"
         style={{ backgroundColor: 'var(--surface-3)', color: 'var(--text-muted)' }}
       >
         Not yet verified
       </span>
     )
   }
-  const s = WORKABILITY_TONE_STYLES[data.tone]
+  const tier = workabilityTierForScore(data.score)
+  if (!tier) return null
   return (
     <span
-      className="px-1.5 py-0.5 rounded-md text-[10px] sm:text-[11px] font-bold whitespace-nowrap"
-      style={{ backgroundColor: s.bg, color: s.color }}
-      title={data.estimate ? 'AI estimate from past reviews — not independently confirmed recently' : undefined}
+      className="inline-flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full whitespace-nowrap"
+      style={{ backgroundColor: tier.bgStrong, boxShadow: `inset 0 0 0 1px ${tier.ring}` }}
+      title={data.estimate ? 'Estimated from reviews, hours, and venue type — not reconfirmed recently' : undefined}
     >
-      {data.score}/10 · {s.label}
-      {data.estimate && (
-        <span className="font-semibold opacity-70" style={{ fontWeight: 500 }}>
-          {' '}· est.
-        </span>
-      )}
+      <span
+        className="flex items-center justify-center w-5 h-5 sm:w-[22px] sm:h-[22px] rounded-full text-[10px] sm:text-[11px] font-extrabold leading-none"
+        style={{ backgroundColor: tier.color, color: 'var(--surface)' }}
+      >
+        {Math.round(data.score)}
+      </span>
+      <span className="text-[10px] sm:text-[11px] font-bold leading-none" style={{ color: tier.color }}>
+        {tier.short}
+        {data.estimate && (
+          <span className="font-semibold opacity-60" style={{ fontWeight: 500 }}>
+            {' '}· est.
+          </span>
+        )}
+      </span>
     </span>
   )
 }

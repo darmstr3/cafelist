@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { SpotsDirectory } from '@/components/SpotsDirectory'
 import { NearMeBanner } from '@/components/NearMeBanner'
+import { TodaysPick } from '@/components/TodaysPick'
 import { UserMenu } from '@/components/UserMenu'
 import { getSpots, getCities } from '@/lib/spots'
 import { getCurrentUser } from '@/lib/supabase-server'
@@ -69,6 +70,9 @@ export default async function HomePage() {
 
       {/* ── Near-me hero banner (always-visible CTA) ── */}
       <NearMeBanner />
+
+      {/* ── Today's pick — the one thing on this page that changes daily. ── */}
+      {!serviceError && spots.length > 0 && <TodaysPick spots={spots} />}
 
       {/* ── Directory ── */}
       {serviceError ? (

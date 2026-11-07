@@ -14,6 +14,7 @@ import {
   isDataConfidenceUnknown,
   isDataConfidenceVerified,
 } from '@/lib/utils'
+import { workabilityTierForScore } from '@/lib/workability'
 import { ReviewForm } from '@/components/ReviewForm'
 import { SpotActions } from '@/components/SpotActions'
 import { SpotViewTracker } from '@/components/SpotViewTracker'
@@ -159,13 +160,6 @@ const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'
 // with the actual editorial signal (workability_score) when present, and
 // is honest about not having one when absent.
 
-function workabilityLabel(score: number): { label: string; color: string; tone: string } {
-  if (score >= 8) return { label: 'Great for working', color: 'var(--yes)', tone: 'rgba(47,125,79,0.10)' }
-  if (score >= 6) return { label: 'Workable', color: 'var(--yes)', tone: 'rgba(47,125,79,0.08)' }
-  if (score >= 4) return { label: 'Workable with friction', color: 'var(--kinda)', tone: 'rgba(198,133,18,0.08)' }
-  return { label: 'Not really a work spot', color: 'var(--no)', tone: 'rgba(168,57,47,0.06)' }
-}
-
 function WorkabilityHero({ spot }: { spot: Spot }) {
   // No editorial score yet — honest empty state, not red badges.
   if (spot.workability_score == null) {
@@ -214,7 +208,13 @@ function WorkabilityHero({ spot }: { spot: Spot }) {
   }
 
   const score = Number(spot.workability_score)
-  const meta = workabilityLabel(score)
+  // Shared tier config (lib/workability.ts) — same cutoffs the grid
+  // cards use, so a spot never reads "great" on the homepage and
+  // something else here. Below the "ok" floor (score < 4) there's no
+  // tier entry; fall back to the honest "not really a work spot" read
+  // rather than hiding the score entirely.
+  const tier = workabilityTierForScore(score)
+  const meta = tier ?? { label: 'Not really a work spot', color: 'var(--no)', bg: 'rgba(168,57,47,0.06)', ring: 'rgba(168,57,47,0.28)' }
   // "Inferred" tier: a real score exists but hasn't been confirmed
   // recently (isDataConfidenceVerified false). Added 2026-10-31 — shown
   // with a visible "estimate" caveat rather than either (a) presenting
@@ -224,25 +224,32 @@ function WorkabilityHero({ spot }: { spot: Spot }) {
   const isEstimate = !isDataConfidenceVerified(spot)
   return (
     <section
-      className="p-5 rounded-xl border mb-6"
-      style={{ backgroundColor: meta.tone, borderColor: 'var(--border-subtle)' }}
+      className="p-5 sm:p-6 rounded-2xl border mb-6 relative overflow-hidden"
+      style={{ backgroundColor: meta.bg, borderColor: 'var(--border-subtle)' }}
     >
-      <div className="flex items-baseline gap-3 mb-2">
-        <span
-          className="text-[28px] font-bold leading-none"
-          style={{ color: meta.color }}
+      {/* Signature move: the score is the whole reason this product exists,
+          so it gets display-serif size and a filled ring, not a line of
+          28px bold text competing with the amenity grid below. */}
+      <div className="flex items-end gap-4 mb-3">
+        <div
+          className="flex items-center justify-center w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-full shrink-0"
+          style={{ backgroundColor: meta.color, boxShadow: `0 0 0 4px ${meta.ring}` }}
         >
-          {score.toFixed(1)}
-        </span>
-        <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-          / 10 workability
-        </span>
-        <span
-          className="ml-auto text-[11px] font-semibold uppercase tracking-wide"
-          style={{ color: meta.color }}
-        >
-          {meta.label}
-        </span>
+          <span className="wordmark text-[26px] sm:text-[30px] font-bold leading-none" style={{ color: 'var(--surface)' }}>
+            {score.toFixed(1)}
+          </span>
+        </div>
+        <div className="pb-1">
+          <p
+            className="text-[13px] sm:text-[15px] font-bold uppercase tracking-wide leading-tight"
+            style={{ color: meta.color }}
+          >
+            {meta.label}
+          </p>
+          <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            out of 10, workability
+          </p>
+        </div>
       </div>
       {spot.workability_reasoning && (
         <p className="text-sm leading-relaxed italic" style={{ color: 'var(--text-secondary)' }}>
@@ -251,8 +258,8 @@ function WorkabilityHero({ spot }: { spot: Spot }) {
       )}
       <p className="text-[10px] mt-2" style={{ color: 'var(--text-muted)' }}>
         {isEstimate
-          ? 'Cafelist AI estimate — based on reviews, hours, and venue type. Not independently confirmed recently.'
-          : 'Cafelist editorial — based on reviews, hours, and venue type. Confirmed within the last 90 days.'}
+          ? 'Estimated from reviews, hours, and venue type — not reconfirmed recently.'
+          : 'Cafelist editorial, confirmed within the last 90 days — based on reviews, hours, and venue type.'}
       </p>
     </section>
   )
